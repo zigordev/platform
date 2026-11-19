@@ -1,0 +1,33 @@
+catalog:
+  "@biomejs/biome": 2.6.8
+  "@commitlint/cli": 21.2.4
+  "@types/node": 26.6.6
+  "@types/pg": 8.23.1
+  "@vitest/coverage-v8": 5.1.0
+  "@zigordev/biome-config": 0.1.0
+  "@zigordev/commitlint-config": 0.1.0
+  "@zigordev/config": 0.1.0
+  "@zigordev/lefthook-config": 0.1.0
+  "@zigordev/otel": 0.1.1
+  "@zigordev/test": 0.1.0
+  "@zigordev/tsconfig": 0.3.0
+  js-yaml: 5.5.0
+  lefthook: 2.2.2
+  pg: 8.23.1
+  typescript: 7.0.2
+  vitest: 5.1.0
+  zod: 4.6.7
+
+minimumReleaseAge: 1440
+
+minimumReleaseAgeExclude:
+  - "@zigordev/*"
+
+allowBuilds:
+  cpu-features: false
+  lefthook: false
+  protobufjs: false
+  ssh2: false
+
+overrides:
+  "glob@<14.0.2": 14.0.2

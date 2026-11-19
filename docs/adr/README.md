@@ -1,0 +1,10 @@
+# Decision records
+
+This repo's decisions. The estate-wide decisions, including the platform's stack (ADRs 0013 to 0016), live in [toolkit's decision records](https://github.com/zigordev/toolkit/blob/main/docs/adr/README.md).
+
+| #                                                 | Decision                                                                | Status   |
+| ------------------------------------------------- | ----------------------------------------------------------------------- | -------- |
+| [0001](0001-hybrid-local-platform.md)             | The local platform runs shared services in Docker and apps as processes | accepted |
+| [0002](0002-app-registry-provisions-databases.md) | The app registry provisions one database and role per app               | accepted |
+
+A new decision is a new record from [the template](template.md) with the next number, added here in the same PR. Accepted records are never edited.
