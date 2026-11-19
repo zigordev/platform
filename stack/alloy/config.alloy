@@ -1,0 +1,77 @@
+otelcol.receiver.otlp "apps" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    metrics = [otelcol.processor.batch.apps.input]
+    logs    = [otelcol.processor.batch.apps.input]
+    traces  = [otelcol.processor.batch.apps.input]
+  }
+}
+
+otelcol.processor.batch "apps" {
+  output {
+    metrics = [otelcol.exporter.otlphttp.destination.input]
+    logs    = [otelcol.exporter.otlphttp.destination.input]
+    traces  = [otelcol.exporter.otlphttp.destination.input]
+  }
+}
+
+otelcol.auth.basic "destination" {
+  username = sys.env("OTLP_USERNAME")
+  password = sys.env("OTLP_PASSWORD")
+}
+
+otelcol.exporter.otlphttp "destination" {
+  client {
+    endpoint = sys.env("OTLP_DESTINATION")
+    auth     = otelcol.auth.basic.destination.handler
+  }
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "network"
+    values = ["zigordev"]
+  }
+}
+
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.write.destination.receiver]
+}
+
+loki.write "destination" {
+  endpoint {
+    url = sys.env("LOKI_DESTINATION")
+
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("LOKI_PASSWORD")
+    }
+  }
+}

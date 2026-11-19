@@ -1,0 +1,47 @@
+{
+  "name": "@zigordev/platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Infrastructure, shared services and the desired state of every zigordev app",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "prepare": "lefthook install",
+    "local:up": "docker compose --file local/compose.yaml up --detach --wait && node scripts/provision-local.ts",
+    "local:down": "docker compose --file local/compose.yaml down",
+    "local:reset": "docker compose --file local/compose.yaml down --volumes && pnpm run local:up",
+    "local:check": "vitest run --project local-stack",
+    "lint": "biome ci .",
+    "format": "biome check --write .",
+    "format:check": "biome format .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --project unit --coverage",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
+  },
+  "dependencies": {
+    "@zigordev/config": "catalog:",
+    "@zigordev/otel": "catalog:",
+    "js-yaml": "catalog:",
+    "pg": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@commitlint/cli": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "@zigordev/biome-config": "catalog:",
+    "@zigordev/commitlint-config": "catalog:",
+    "@zigordev/lefthook-config": "catalog:",
+    "@zigordev/test": "catalog:",
+    "@zigordev/tsconfig": "catalog:",
+    "lefthook": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

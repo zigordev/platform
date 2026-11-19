@@ -1,0 +1,13 @@
+{
+  "extends": "@zigordev/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "${configDir}"
+  },
+  "include": [
+    "${configDir}/src",
+    "${configDir}/scripts",
+    "${configDir}/test",
+    "${configDir}/*.config.ts"
+  ]
+}

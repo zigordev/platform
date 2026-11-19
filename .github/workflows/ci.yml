@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo:
+    name: Repo
+    uses: zigordev/toolkit/.github/workflows/repo-checks.yml@06f81d27c38f31c78b4bc963808d41ac0062b178 # workflows-v0.2.0
+    permissions:
+      contents: read
+      pull-requests: read
+
+  node:
+    name: Node
+    uses: zigordev/toolkit/.github/workflows/node-ci.yml@06f81d27c38f31c78b4bc963808d41ac0062b178 # workflows-v0.2.0
+    permissions:
+      contents: read
+      packages: read
+
+  local-stack:
+    name: Local Stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+
+      - name: Install
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          trap 'rm -f "$HOME/.npmrc"' EXIT
+          printf '%s\n' '@zigordev:registry=https://npm.pkg.github.com' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' > "$HOME/.npmrc"
+          pnpm install --frozen-lockfile
+
+      - name: Start the local platform
+        run: pnpm run local:up
+
+      - name: Probe it
+        run: pnpm run local:check
+
+      - name: Show the platform's logs
+        if: failure()
+        run: docker compose --file local/compose.yaml logs --no-color
+
+      - name: Stop the local platform
+        if: always()
+        run: docker compose --file local/compose.yaml down --volumes
