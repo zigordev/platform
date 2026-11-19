@@ -10,7 +10,7 @@ provider "aws" {
 }
 
 locals {
-  repository = "zigordev/platform"
+  oidc_subject = "repo:zigordev@261390829/platform@1464253077"
 }
 
 data "aws_caller_identity" "current" {}
@@ -117,8 +117,8 @@ resource "aws_s3_bucket_policy" "state" {
 
 data "aws_iam_policy_document" "github_trust" {
   for_each = {
-    plan  = "repo:${local.repository}:pull_request"
-    apply = "repo:${local.repository}:environment:production"
+    plan  = ["${local.oidc_subject}:pull_request", "${local.oidc_subject}:ref:refs/heads/main"]
+    apply = ["${local.oidc_subject}:environment:production"]
   }
 
   statement {
@@ -138,14 +138,14 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [each.value]
+      values   = each.value
     }
   }
 }
 
 resource "aws_iam_role" "plan" {
   name               = "platform-tofu-plan"
-  description        = "Runs OpenTofu plans for zigordev/platform pull requests"
+  description        = "Runs OpenTofu plans for zigordev/platform pull requests and main"
   assume_role_policy = data.aws_iam_policy_document.github_trust["plan"].json
 }
 

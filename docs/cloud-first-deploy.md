@@ -11,7 +11,7 @@ The production side of the platform is being built in the second half of Phase 2
 - `platform-tofu-plan`, the role pull requests plan with. It reads AWS, holds the state lock and uses the state key, and it is denied every S3 object outside the state bucket and every parameter outside `/platform/`.
 - `platform-tofu-apply`, the role that applies. Only a workflow running in the `production` environment, which the owner approves, can take it.
 
-Both roles trust the GitHub sign-in provider that already exists in the account. The bootstrap is the one stack applied from a laptop, once, with the owner's OK:
+Both roles trust the GitHub sign-in provider that already exists in the account, through the immutable subjects GitHub signs this repo's tokens with: `repo:zigordev@261390829/platform@1464253077:pull_request` and `:ref:refs/heads/main` for the plan role, `:environment:production` for the apply role. The bootstrap was first applied from a laptop with the owner's OK, because the roles CI uses did not exist yet. The same commands repair it if a change ever breaks those roles:
 
 ```bash
 cd infra/bootstrap
@@ -23,6 +23,17 @@ AWS_PROFILE=platform-ops mise exec -- tofu apply bootstrap.tfplan
 It was applied on 2026-11-19. Its state lives in the bucket it created, at `bootstrap/terraform.tfstate`, encrypted with the state key. OpenTofu refuses to read or write state or plans without that encryption, so the commands above need the `platform-ops` profile, and nothing about the bootstrap stays on a laptop.
 
 `mise.toml` pins the OpenTofu version, and each stack's `opentofu.tofu` holds the lowest version it accepts ([ADR 0004](adr/0004-opentofu-version-floor.md)). An older `tofu` stops at `init` with "Incompatible module".
+
+## How a change reaches AWS
+
+The Tofu workflow runs every stack in `infra/` through OpenTofu ([ADR 0005](adr/0005-merges-apply-the-approved-plan.md)):
+
+1. On a pull request, its Plan job plans each stack with `platform-tofu-plan`. The plans are in the job's log and summary, and nothing is applied.
+2. On a merge to `main`, Plan runs again on the merged code. When no stack changes, the run ends there.
+3. When a stack changes, its plan is saved, encrypted with the state key, and the Apply job waits in the `production` environment. Read the plan in the Plan job's summary, then approve the deployment on the run. Apply then applies exactly the saved plans with `platform-tofu-apply`.
+4. If an apply fails, or the state moved while the approval waited, re-run all jobs. OpenTofu refuses a saved plan whose state has moved on, so the run plans again first.
+
+A newer merge waits until a pending approval is given or rejected. Reject a stale approval to let the newer run plan again.
 
 ## What production will be
 

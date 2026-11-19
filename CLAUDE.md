@@ -26,5 +26,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - OpenTofu, tflint, trivy, sops and age come from `mise.toml`. Run them as `mise exec -- tofu ...`, with `AWS_PROFILE=platform-ops` for the zigordev account.
 - Each stack states the lowest OpenTofu version it accepts in `opentofu.tofu`, with a `language` block that OpenTofu checks at `init`. OpenTofu ignores `required_version` in `.tf` files, so no stack sets it, and no stack has a `versions.tofu`, which would hide `versions.tf` ([ADR 0004](docs/adr/0004-opentofu-version-floor.md)).
 - `tofu plan` reads, so it may run any time. `tofu apply`, and any change to AWS, GitHub environments or Cloudflare, waits for the owner's OK every time.
+- The Tofu workflow's Apply job applies merged changes after the owner approves the plan in the `production` environment. A laptop apply is only for the bootstrap's CI roles, when CI cannot apply them itself ([ADR 0005](docs/adr/0005-merges-apply-the-approved-plan.md)).
+- GitHub signs this repo's tokens with immutable subjects, `repo:zigordev@261390829/platform@1464253077:...`. An AWS trust policy for GitHub's sign-in names that form, never `repo:zigordev/platform:...`, which never matches.
 - Cloud resources are prefixed `platform-`. The legacy `platform-ops-*` resources in the same account are never read into a stack, changed or imported.
 - A new decision gets a record in `docs/adr/` from the template, with the next number, in the same PR.
