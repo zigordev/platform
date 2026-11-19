@@ -4,15 +4,16 @@ Where every zigordev app runs, described in code: the shared services, the infra
 
 ## What it is
 
-| Path                       | Holds                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `local/compose.yaml`       | The local platform: PostgreSQL 18, Mailpit, Grafana Alloy and Grafana's otel-lgtm image, on the `zigordev` Docker network |
-| `stack/alloy/config.alloy` | The Alloy pipeline, shared by the local platform and production, with only environment variables telling them apart       |
-| `apps/<app>/app.yaml`      | The app registry, one folder per app. Each app that asks for a database gets its own database and role                    |
-| `src/` and `scripts/`      | The registry reader and the database provisioning, with their tests                                                       |
-| `docs/`                    | How to run it, how apps use it, a tutorial and the decision records                                                       |
+| Path                       | Holds                                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `local/compose.yaml`       | The local platform: PostgreSQL 18, Mailpit, Grafana Alloy and Grafana's otel-lgtm image, on the `zigordev` Docker network                  |
+| `stack/alloy/config.alloy` | The Alloy pipeline, shared by the local platform and production, with only environment variables telling them apart                        |
+| `apps/<app>/app.yaml`      | The app registry, one folder per app. Each app that asks for a database gets its own database and role                                     |
+| `infra/bootstrap/`         | OpenTofu that creates what every other stack needs first: the encrypted state bucket, its KMS key, and the roles CI plans and applies with |
+| `src/` and `scripts/`      | The registry reader and the database provisioning, with their tests                                                                        |
+| `docs/`                    | How to run it, how apps use it, a tutorial and the decision records                                                                        |
 
-Later in Phase 2, `infra/` (OpenTofu), `host/` (cloud-init, systemd units, doco-cd) and `observability/` join it.
+Later in Phase 2, more of `infra/`, `host/` (cloud-init, systemd units, doco-cd) and `observability/` join it.
 
 ## Why it exists
 
@@ -20,11 +21,11 @@ The legacy estate ran 14 shared services on its production host and seven local 
 
 ## Technologies and tools
 
-Docker Compose, PostgreSQL 18, Mailpit, Grafana Alloy, and grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus. Node.js 26, TypeScript 7 and pnpm 12, pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
+Docker Compose, PostgreSQL 18, Mailpit, Grafana Alloy, and grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus. OpenTofu 1.13 with tflint and trivy, sops and age. Node.js 26, TypeScript 7 and pnpm 12, all pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
 
 ## Dependencies
 
-A running Docker engine, and toolkit's packages from GitHub Packages, which need a token with `read:packages`. Nothing from platform-ops.
+A running Docker engine, and toolkit's packages from GitHub Packages, which need a token with `read:packages`. The cloud stacks run in the zigordev AWS account, in `eu-west-1`, beside the legacy resources and without touching them. Nothing from platform-ops.
 
 ## Quick start
 
