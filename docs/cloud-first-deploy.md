@@ -22,6 +22,8 @@ AWS_PROFILE=platform-ops mise exec -- tofu apply bootstrap.tfplan
 
 It was applied on 2026-11-19. Its state lives in the bucket it created, at `bootstrap/terraform.tfstate`, encrypted with the state key. OpenTofu refuses to read or write state or plans without that encryption, so the commands above need the `platform-ops` profile, and nothing about the bootstrap stays on a laptop.
 
+`mise.toml` pins the OpenTofu version, and each stack's `opentofu.tofu` holds the lowest version it accepts ([ADR 0004](adr/0004-opentofu-version-floor.md)). An older `tofu` stops at `init` with "Incompatible module".
+
 ## What production will be
 
 The decisions are recorded in toolkit's ADRs 0013 to 0016:
