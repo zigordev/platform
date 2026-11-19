@@ -24,6 +24,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - Images are pinned to exact versions, at least three days old, and Renovate proposes their updates.
 - `overrides` in `pnpm-workspace.yaml` lifts `glob` to 14.0.2, because testcontainers' archiver and otel's GCP detector still pin `glob` 10, which carries GHSA-3g3m-2fjr-6pw4. Remove the override once both resolve a patched `glob` on their own.
 - OpenTofu, tflint, trivy, sops and age come from `mise.toml`. Run them as `mise exec -- tofu ...`, with `AWS_PROFILE=platform-ops` for the zigordev account.
+- Each stack states the lowest OpenTofu version it accepts in `opentofu.tofu`, with a `language` block that OpenTofu checks at `init`. OpenTofu ignores `required_version` in `.tf` files, so no stack sets it, and no stack has a `versions.tofu`, which would hide `versions.tf` ([ADR 0004](docs/adr/0004-opentofu-version-floor.md)).
 - `tofu plan` reads, so it may run any time. `tofu apply`, and any change to AWS, GitHub environments or Cloudflare, waits for the owner's OK every time.
 - Cloud resources are prefixed `platform-`. The legacy `platform-ops-*` resources in the same account are never read into a stack, changed or imported.
 - A new decision gets a record in `docs/adr/` from the template, with the next number, in the same PR.

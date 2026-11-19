@@ -7,5 +7,6 @@ This repo's decisions. The estate-wide decisions, including the platform's stack
 | [0001](0001-hybrid-local-platform.md)             | The local platform runs shared services in Docker and apps as processes                 | accepted |
 | [0002](0002-app-registry-provisions-databases.md) | The app registry provisions one database and role per app                               | accepted |
 | [0003](0003-encrypted-state-and-ci-roles.md)      | OpenTofu state lives encrypted in S3, and CI plans and applies through GitHub's sign-in | accepted |
+| [0004](0004-opentofu-version-floor.md)            | Stacks state their OpenTofu version in a language block                                 | accepted |
 
 A new decision is a new record from [the template](template.md) with the next number, added here in the same PR. Accepted records are never edited.
