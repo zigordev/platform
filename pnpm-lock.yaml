@@ -201,8 +201,8 @@ catalogs:
       specifier: 0.1.0
       version: 0.1.0
     '@zigordev/otel':
-      specifier: 0.1.1
-      version: 0.1.1
+      specifier: 0.1.2
+      version: 0.1.2
     '@zigordev/test':
       specifier: 0.1.0
       version: 0.1.0
@@ -240,7 +240,7 @@ importers:
         version: 0.1.0(zod@4.6.7)
       '@zigordev/otel':
         specifier: 'catalog:'
-        version: 0.1.1(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))
+        version: 0.1.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))
       js-yaml:
         specifier: 'catalog:'
         version: 5.5.0
@@ -1345,8 +1345,8 @@ packages:
       '@commitlint/cli': ^21.2.0
       lefthook: ^2.2.0
 
-  '@zigordev/otel@0.1.1':
-    resolution: {integrity: sha512-lTfse5CdB935ml8HQrN9pdyjKDcX9SOMCib06BEAyG8BHXhr7VfmnWFsjoufvXMHo90CTlYCRNXryGzbF4DRQQ==, tarball: https://npm.pkg.github.com/download/@zigordev/otel/0.1.1/48c92bc21ae5aac6776633c985522e9f919cafd1}
+  '@zigordev/otel@0.1.2':
+    resolution: {integrity: sha512-BAkl6qEGoJXpOWbGLXY13pWyMgX7Vn9vkVuU9J2Ark5vK/OlMqcJ+hz2X7Q7CB9P/tW/RiugrQFBLM0/MAZndg==, tarball: https://npm.pkg.github.com/download/@zigordev/otel/0.1.2/000a1ef61d87e262d9d6a768f9b0e2c8de99d786}
     peerDependencies:
       '@opentelemetry/api': ^1.10.0
 
@@ -3633,7 +3633,7 @@ snapshots:
       '@commitlint/cli': 21.2.4(conventional-commits-parser@7.1.4)(typescript@7.0.2)
       lefthook: 2.2.2
 
-  '@zigordev/otel@0.1.1(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))':
+  '@zigordev/otel@0.1.2(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))':
     dependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/auto-instrumentations-node': 0.83.1(@opentelemetry/api@1.10.0)(@opentelemetry/core@3.1.1(@opentelemetry/api@1.10.0))

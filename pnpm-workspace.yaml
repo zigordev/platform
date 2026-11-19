@@ -8,7 +8,7 @@ catalog:
   "@zigordev/commitlint-config": 0.1.0
   "@zigordev/config": 0.1.0
   "@zigordev/lefthook-config": 0.1.0
-  "@zigordev/otel": 0.1.1
+  "@zigordev/otel": 0.1.2
   "@zigordev/test": 0.1.0
   "@zigordev/tsconfig": 0.3.0
   js-yaml: 5.5.0
