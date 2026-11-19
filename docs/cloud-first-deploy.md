@@ -20,7 +20,7 @@ AWS_PROFILE=platform-ops mise exec -- tofu plan -out bootstrap.tfplan
 AWS_PROFILE=platform-ops mise exec -- tofu apply bootstrap.tfplan
 ```
 
-Its state then moves into the bucket it created, encrypted like every other stack's.
+It was applied on 2026-11-19. Its state lives in the bucket it created, at `bootstrap/terraform.tfstate`, encrypted with the state key. OpenTofu refuses to read or write state or plans without that encryption, so the commands above need the `platform-ops` profile, and nothing about the bootstrap stays on a laptop.
 
 ## What production will be
 
