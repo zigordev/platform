@@ -30,4 +30,4 @@ allowBuilds:
   ssh2: false
 
 overrides:
-  "glob@<14.0.2": 14.0.2
+  "glob@<14.0.2": 14.0.6
