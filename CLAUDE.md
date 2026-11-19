@@ -21,4 +21,5 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - The platform's containers, volumes and network are its own. Never stop, recreate or reconfigure a container outside the `platform-local` project.
 - Alloy reads logs only from containers on the `zigordev` network. Keep that filter, so no other container's logs are read.
 - Images are pinned to exact versions, at least three days old, and Renovate proposes their updates.
+- `overrides` in `pnpm-workspace.yaml` lifts `glob` to 14.0.2, because testcontainers' archiver and otel's GCP detector still pin `glob` 10, which carries GHSA-3g3m-2fjr-6pw4. Remove the override once both resolve a patched `glob` on their own.
 - A new decision gets a record in `docs/adr/` from the template, with the next number, in the same PR.
