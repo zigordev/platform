@@ -1,0 +1,122 @@
+name: Tofu
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: tofu-${{ github.event_name == 'push' && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          install_args: opentofu
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::512539654280:role/platform-tofu-plan
+          role-session-name: platform-tofu-plan
+          aws-region: eu-west-1
+
+      - name: Plan every stack
+        id: plan
+        env:
+          PLANS: ${{ runner.temp }}/plans
+        run: |
+          mkdir -p "$PLANS"
+          changed=""
+          for dir in infra/*/; do
+            stack=$(basename "$dir")
+            tofu -chdir="$dir" init -input=false -no-color
+            status=0
+            tofu -chdir="$dir" plan -input=false -no-color -lock-timeout=5m -detailed-exitcode -out="$PLANS/$stack.tfplan" > "$PLANS/$stack.txt" || status=$?
+            cat "$PLANS/$stack.txt"
+            case "$status" in
+              0)
+                rm -f "$PLANS/$stack.tfplan"
+                printf '### %s\n\nNo changes.\n\n' "$stack" >> "$GITHUB_STEP_SUMMARY"
+                ;;
+              2)
+                changed="$changed $stack"
+                {
+                  printf '### %s\n\n```\n' "$stack"
+                  head -c 60000 "$PLANS/$stack.txt"
+                  printf '\n```\n\n'
+                } >> "$GITHUB_STEP_SUMMARY"
+                ;;
+              *)
+                exit "$status"
+                ;;
+            esac
+            rm -f "$PLANS/$stack.txt"
+          done
+          echo "changed=${changed# }" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the plans for the apply
+        if: github.event_name == 'push' && steps.plan.outputs.changed != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: plans
+          path: ${{ runner.temp }}/plans
+          retention-days: 7
+          if-no-files-found: error
+
+  apply:
+    name: Apply
+    needs: plan
+    if: github.event_name == 'push' && needs.plan.outputs.changed != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          install_args: opentofu
+          cache: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::512539654280:role/platform-tofu-apply
+          role-session-name: platform-tofu-apply
+          aws-region: eu-west-1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: plans
+          path: ${{ runner.temp }}/plans
+
+      - name: Apply the approved plans
+        env:
+          CHANGED: ${{ needs.plan.outputs.changed }}
+          PLANS: ${{ runner.temp }}/plans
+        run: |
+          for stack in $CHANGED; do
+            tofu -chdir="infra/$stack" init -input=false -no-color
+            tofu -chdir="infra/$stack" apply -input=false -no-color -lock-timeout=5m "$PLANS/$stack.tfplan"
+          done
