@@ -28,6 +28,38 @@ jobs:
       contents: read
       packages: read
 
+  infra:
+    name: Infra
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          install_args: opentofu tflint trivy
+
+      - name: Check the format
+        run: tofu fmt -check -recursive infra
+
+      - name: Validate every stack
+        run: |
+          for stack in infra/*/; do
+            tofu -chdir="$stack" init -backend=false -input=false
+            tofu -chdir="$stack" validate
+          done
+
+      - name: Lint
+        working-directory: infra
+        run: tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
+      - name: Scan the configuration
+        run: trivy config --severity HIGH,CRITICAL --exit-code 1 infra
+
   local-stack:
     name: Local Stack
     runs-on: ubuntu-latest

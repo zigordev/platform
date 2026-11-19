@@ -5,7 +5,7 @@ How to run the platform on a laptop, from nothing. It needs nothing from platfor
 ## Prerequisites
 
 - git, with the zigordev identity set in this repo
-- [mise](https://mise.jdx.dev), which installs the Node, pnpm and gitleaks versions in `mise.toml`
+- [mise](https://mise.jdx.dev), which installs the versions in `mise.toml`: Node, pnpm and gitleaks, and for the cloud stacks OpenTofu, tflint, trivy, sops and age
 - A running Docker engine, such as Docker Desktop
 - The GitHub CLI, signed in as zigordev, with the `read:packages` scope
 
