@@ -11,7 +11,7 @@ The production side of the platform is being built in the second half of Phase 2
 - `platform-tofu-plan`, the role pull requests plan with. It reads AWS, holds the state lock and uses the state key, and it is denied every S3 object outside the state bucket and every parameter outside `/platform/`.
 - `platform-tofu-apply`, the role that applies. Only a workflow running in the `production` environment, which the owner approves, can take it.
 
-Both roles trust the GitHub sign-in provider that already exists in the account. The bootstrap was first applied from a laptop with the owner's OK, because the roles CI uses did not exist yet. The same commands repair it if a change ever breaks those roles:
+Both roles trust the GitHub sign-in provider that already exists in the account, through the immutable subjects GitHub signs this repo's tokens with: `repo:zigordev@261390829/platform@1464253077:pull_request` and `:ref:refs/heads/main` for the plan role, `:environment:production` for the apply role. The bootstrap was first applied from a laptop with the owner's OK, because the roles CI uses did not exist yet. The same commands repair it if a change ever breaks those roles:
 
 ```bash
 cd infra/bootstrap

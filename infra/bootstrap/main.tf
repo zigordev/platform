@@ -10,7 +10,7 @@ provider "aws" {
 }
 
 locals {
-  repository = "zigordev/platform"
+  oidc_subject = "repo:zigordev@261390829/platform@1464253077"
 }
 
 data "aws_caller_identity" "current" {}
@@ -117,8 +117,8 @@ resource "aws_s3_bucket_policy" "state" {
 
 data "aws_iam_policy_document" "github_trust" {
   for_each = {
-    plan  = ["repo:${local.repository}:pull_request", "repo:${local.repository}:ref:refs/heads/main"]
-    apply = ["repo:${local.repository}:environment:production"]
+    plan  = ["${local.oidc_subject}:pull_request", "${local.oidc_subject}:ref:refs/heads/main"]
+    apply = ["${local.oidc_subject}:environment:production"]
   }
 
   statement {
