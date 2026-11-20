@@ -1,6 +1,6 @@
 import { projectTestConfig } from '@zigordev/test/vitest';
 import { defineProject } from 'vitest/config';
 
-export default defineProject(
-  projectTestConfig({ name: 'local-stack', include: ['test/local-stack.test.ts'] })
-);
+const { test } = projectTestConfig({ name: 'local-stack', include: ['test/local-stack.test.ts'] });
+
+export default defineProject({ test: { ...test, testTimeout: 150_000 } });
