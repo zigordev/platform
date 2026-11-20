@@ -37,4 +37,4 @@ pnpm install
 pnpm local:up
 ```
 
-Grafana opens at <http://127.0.0.1:3300> and Mailpit at <http://127.0.0.1:8025>. [Local first start](docs/local-first-start.md) has the details, the [user manual](docs/user-manual.md) shows how an app uses the platform, and the [tutorial](docs/tutorials/run-an-app-locally.md) walks through it.
+mise has to be active in your shell, or each command prefixed with `mise exec --`, as [local first start](docs/local-first-start.md#activate-mise) shows. Grafana opens at <http://127.0.0.1:3300> and Mailpit at <http://127.0.0.1:8025>. [Local first start](docs/local-first-start.md) has the details, the [user manual](docs/user-manual.md) shows how an app uses the platform, and the [tutorial](docs/tutorials/run-an-app-locally.md) walks through it.

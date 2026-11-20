@@ -5,9 +5,19 @@ How to run the platform on a laptop, from nothing. It needs nothing from platfor
 ## Prerequisites
 
 - git, with the zigordev identity set in this repo
-- [mise](https://mise.jdx.dev), which installs the versions in `mise.toml`: Node, pnpm and gitleaks, and for the cloud stacks OpenTofu, tflint, trivy, sops and age
+- [mise](https://mise.jdx.dev), activated in your shell, which installs and selects the versions in `mise.toml`: Node, pnpm and gitleaks, and for the cloud stacks OpenTofu, tflint, trivy, sops and age
 - A running Docker engine, such as Docker Desktop
 - The GitHub CLI, signed in as zigordev, with the `read:packages` scope
+
+## Activate mise
+
+`mise install` only downloads the versions. Activate mise in your shell once, so that inside this repo they come first on your `PATH`, ahead of any Node from nvm or pnpm from Homebrew:
+
+```bash
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc
+```
+
+Use `mise activate bash` in `~/.bashrc` for bash. Open a new terminal afterwards: in the repo, `node --version` prints v26 and `pnpm --version` prints 12.21.0. To skip activation, prefix each command with `mise exec --`, such as `mise exec -- pnpm install`.
 
 ## Access to GitHub Packages
 
@@ -81,6 +91,7 @@ pnpm local:check
 
 ## When something fails
 
+- **`pnpm` prints `Failed to switch pnpm to v12.21.0`, or `node --version` is not v26:** mise is not active in this shell, so another Node or pnpm comes first on `PATH`. Activate it as [Activate mise](#activate-mise) says and open a new terminal, or prefix the command with `mise exec --`.
 - **A port is taken:** another program listens on 5432, 1025, 8025, 4317, 4318 or 3300. Stop it, then start the platform again.
 - **`local:up` never turns healthy:** `docker compose --file local/compose.yaml logs` shows each container's output.
 - **`pnpm install` returns 401:** `NODE_AUTH_TOKEN` is empty or the token lacks `read:packages`.
