@@ -1,8 +1,14 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { load } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { dashboardsProvider, provisionDashboards, readAppObservability } from './provision.ts';
+import {
+  dashboardsProvider,
+  provisionAlerting,
+  provisionDashboards,
+  readAppObservability,
+} from './provision.ts';
 
 let root: string;
 let appsDir: string;
@@ -85,5 +91,41 @@ describe('provisionDashboards', () => {
         'utf8'
       )
     ).toBe(dashboardsProvider);
+  });
+});
+
+describe('provisionAlerting', () => {
+  it("writes the platform's alerts and each app's, its own included, for Grafana to load", async () => {
+    await addObservability(
+      'cv-web',
+      "export const observability = { alerts: [{ name: 'CvWebQuestionsFailing', summary: 'Questions fail', expr: 'vector(1)', for: '0m', severity: 'ticket', runbook: 'https://example.test/r.md', dashboard: 'app-cv-web' }] };\n"
+    );
+
+    const result = await provisionAlerting(
+      appsDir,
+      localDir,
+      [{ name: 'cv-web' }, { name: 'gpool-api' }],
+      'http://grafana.test'
+    );
+    const document = load(await readFile(result.file, 'utf8')) as {
+      groups: { name: string; rules: { title: string }[] }[];
+    };
+
+    expect(result).toEqual({
+      file: join(localDir, 'grafana', 'provisioning', 'alerting', 'zigordev.yaml'),
+      alerts: [
+        'PlatformFlagdDown',
+        'CvWebErrorRatio',
+        'CvWebQuestionsFailing',
+        'GpoolApiErrorRatio',
+      ],
+    });
+    expect(
+      document.groups.map((group) => [group.name, group.rules.map((rule) => rule.title)])
+    ).toEqual([
+      ['platform', ['PlatformFlagdDown']],
+      ['cv-web', ['CvWebErrorRatio', 'CvWebQuestionsFailing']],
+      ['gpool-api', ['GpoolApiErrorRatio']],
+    ]);
   });
 });

@@ -1,7 +1,9 @@
 import { access, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { dump } from 'js-yaml';
 import type { App } from '../registry.ts';
+import { type AlertGroup, alertingProvisioning, appAlerts, platformAlerts } from './alerts.ts';
 import { type AppObservability, appDashboard, platformDashboard } from './dashboards.ts';
 
 export const observabilityFile = 'observability.ts';
@@ -70,4 +72,30 @@ export async function provisionDashboards(
   }
   await writeFile(join(providerDir, 'zigordev.yaml'), dashboardsProvider);
   return { dashboards: built.map((board) => String(board.uid)) };
+}
+
+export async function provisionAlerting(
+  appsDir: string,
+  localDir: string,
+  apps: readonly Pick<App, 'name'>[],
+  grafanaUrl: string
+): Promise<{ file: string; alerts: string[] }> {
+  const alertingDir = join(localDir, 'grafana', 'provisioning', 'alerting');
+  await mkdir(alertingDir, { recursive: true });
+  const groups: AlertGroup[] = [
+    { name: 'platform', alerts: platformAlerts },
+    ...(await Promise.all(
+      apps.map(async (app) => ({
+        name: app.name,
+        alerts: [
+          ...appAlerts(app.name),
+          ...((await readAppObservability(appsDir, app)).alerts ?? []),
+        ],
+      }))
+    )),
+  ];
+  const file = join(alertingDir, 'zigordev.yaml');
+  const document: unknown = JSON.parse(JSON.stringify(alertingProvisioning(groups, grafanaUrl)));
+  await writeFile(file, dump(document, { lineWidth: -1, noRefs: true }));
+  return { file, alerts: groups.flatMap((group) => group.alerts.map((alert) => alert.name)) };
 }

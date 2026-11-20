@@ -2,6 +2,9 @@ import type { AppObservability } from '../../src/observability/dashboards.ts';
 import { metricSeries } from '../../src/observability/panels.ts';
 
 const job = 'job="notifications-api"';
+const runbooks = 'https://github.com/zigordev/notifications/blob/main/docs/runbooks';
+const inTime = (window: string): string =>
+  `sum(rate(notifications_email_delivery_duration_seconds_bucket{${job}, le="120"}[${window}])) / sum(rate(notifications_email_delivery_duration_seconds_count{${job}}[${window}]))`;
 
 export const observability: AppObservability = {
   rows: [
@@ -39,6 +42,29 @@ export const observability: AppObservability = {
           },
         ]),
       ],
+    },
+  ],
+  alerts: [
+    {
+      name: 'NotificationsDeliveryObjective',
+      summary:
+        'Fewer emails go out within two minutes than the 99% objective allows, fast enough to spend the month of budget early',
+      expr: `((1 - (${inTime('1h')})) > (14.4 * 0.01)) and ((1 - (${inTime('5m')})) > (14.4 * 0.01))`,
+      for: '2m',
+      severity: 'page',
+      runbook: `${runbooks}/delivery-objective.md`,
+      dashboard: 'app-notifications-api',
+      windowSeconds: 3600,
+    },
+    {
+      name: 'NotificationsDeadLetters',
+      summary: 'An email failed for good in the last hour and went to the dead letters',
+      expr: `sum(increase(notifications_email_deliveries_total{${job}, outcome="failed"}[1h])) > 0`,
+      for: '0m',
+      severity: 'ticket',
+      runbook: `${runbooks}/dead-letters.md`,
+      dashboard: 'app-notifications-api',
+      windowSeconds: 3600,
     },
   ],
 };

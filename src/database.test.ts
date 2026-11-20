@@ -174,6 +174,7 @@ describe('the provision-local script', () => {
           event: 'platform.dashboards_written',
           dashboards: ['platform', `app-${app}`],
         }),
+        expect.objectContaining({ event: 'platform.alerts_written' }),
       ]);
       expect((await readdir(localDir)).sort()).toEqual([
         '.env',
@@ -183,7 +184,7 @@ describe('the provision-local script', () => {
       ]);
       expect(await readFile(join(localDir, '.env'), 'utf8')).toMatch(
         new RegExp(
-          `^FLAGD_SOURCES='\\[\\{"uri":"/apps/${app}/flags\\.json","provider":"file"\\}\\]'\nALLOY_CONFIG_SHA='[0-9a-f]{64}'\n$`
+          `^FLAGD_SOURCES='\\[\\{"uri":"/apps/${app}/flags\\.json","provider":"file"\\}\\]'\nALLOY_CONFIG_SHA='[0-9a-f]{64}'\nGRAFANA_ALERTING_SHA='[0-9a-f]{64}'\n$`
         )
       );
     } finally {

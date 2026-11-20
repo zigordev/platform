@@ -26,6 +26,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 
 - The platform's containers, volumes and network are its own. Never stop, recreate or reconfigure a container outside the `platform-local` project.
 - Alloy reads logs only from containers on the `zigordev` network. Keep that filter, so no other container's logs are read.
+- Every alert links a runbook and its dashboard, carries a `severity` of `page` or `ticket`, and is named `<App><What>`, such as `NotificationsDeadLetters`. Its `expr` returns a value only while it should fire. The platform's runbooks live in `docs/runbooks/`, and an app's in its own repo ([ADR 0011](docs/adr/0011-alert-rules-are-code-with-runbooks.md)).
 - Every dashboard query is scoped to its app: Prometheus by `job="<app>"`, Loki by `service_name="<app>"`. Run a new query against the local Prometheus or Loki before it goes in.
 - Alloy's Faro receiver never downloads sourcemaps, and takes its allowed origins from `FARO_ALLOWED_ORIGINS` ([ADR 0009](docs/adr/0009-alloy-receives-browser-telemetry.md)).
 - A flags file's `flagSetId` is its app's name, and every flag has a `defaultVariant` and a `removeBy` date. `pnpm run check` fails on a flag past its date: remove it, or move the date in the same PR.

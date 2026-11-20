@@ -6,6 +6,7 @@ const configSchema = z.object({
   PLATFORM_APPS_DIR: z.string().min(1).default('apps'),
   PLATFORM_LOCAL_DIR: z.string().min(1).default('local'),
   PLATFORM_ALLOY_CONFIG: z.string().min(1).default('stack/alloy/config.alloy'),
+  PLATFORM_GRAFANA_URL: z.url().default('http://127.0.0.1:3300'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
