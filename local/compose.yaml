@@ -99,6 +99,32 @@ services:
         condition: service_healthy
     networks: [zigordev]
 
+  flagd:
+    image: ghcr.io/open-feature/flagd:v0.19.0
+    container_name: platform-flagd
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    command: [start, --sources, "${FLAGD_SOURCES:-[]}", --cors-origin, "*", --log-format, json]
+    environment:
+      OTEL_SERVICE_NAME: platform-flagd
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    ports:
+      - 127.0.0.1:8013:8013
+      - 127.0.0.1:8014:8014
+      - 127.0.0.1:8015:8015
+      - 127.0.0.1:8016:8016
+    volumes:
+      - ../apps:/apps:ro
+    depends_on:
+      alloy:
+        condition: service_healthy
+    networks: [zigordev]
+
   notifications-api-migrate:
     image: ghcr.io/zigordev/notifications-api:0.3.0@sha256:833d1fd4c41de56402274e80fc7f18693e0b0cf60fc78b34e9b01722cd17f004
     container_name: platform-notifications-api-migrate

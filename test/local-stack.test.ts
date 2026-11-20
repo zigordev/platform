@@ -3,12 +3,16 @@ import { connect } from 'node:net';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
 import { readConfig } from '../src/config.ts';
+import { readFlags } from '../src/flags.ts';
 import { defaultProducer, readProducers } from '../src/producers.ts';
+import { readApps } from '../src/registry.ts';
 
 const grafana = 'http://127.0.0.1:3300/api/datasources/proxy/uid';
 const otlp = 'http://127.0.0.1:4318';
 const mailpit = 'http://127.0.0.1:8025';
 const notifications = 'http://127.0.0.1:3001';
+const flagd = 'http://127.0.0.1:8016/ofrep/v1/evaluate/flags';
+const flagdManagement = 'http://127.0.0.1:8014';
 
 async function eventually<T>(probe: () => Promise<T | undefined>, timeoutMs = 60_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -44,6 +48,14 @@ async function postOtlp(signal: 'traces' | 'metrics', body: unknown): Promise<vo
     body: JSON.stringify(body),
   });
   expect(response.status).toBe(200);
+}
+
+async function evaluateFlag(key: string, flagSetId: string): Promise<Response> {
+  return fetch(`${flagd}/${key}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'flagd-selector': `flagSetId=${flagSetId}` },
+    body: JSON.stringify({ context: {} }),
+  });
 }
 
 function findMail(subject: string): Promise<Record<string, unknown>> {
@@ -242,9 +254,55 @@ describe('the local platform', () => {
     expect(series).toHaveLength(1);
   });
 
+  it('serves each app its own flags through flagd, and no other app sees them', async () => {
+    const [hello] = await readFlags('apps', await readApps('apps'));
+    if (hello === undefined) {
+      throw new Error('no app in apps/ has a flags.json for the check to evaluate');
+    }
+    const [key, flag] = Object.entries(hello.flags.flags)[0] ?? [];
+    if (key === undefined || flag === undefined) {
+      throw new Error(`${hello.file} has no flags`);
+    }
+
+    const own = await eventually(async () => {
+      const response = await evaluateFlag(key, hello.app);
+      return response.ok ? ((await response.json()) as Record<string, unknown>) : undefined;
+    });
+    const other = await evaluateFlag(key, 'platform-local-check');
+
+    expect(own).toMatchObject({
+      key,
+      variant: flag.defaultVariant,
+      value: flag.variants[flag.defaultVariant],
+      metadata: { flagSetId: hello.app },
+    });
+    expect(other.status).toBe(404);
+    expect(await other.json()).toMatchObject({ errorCode: 'FLAG_NOT_FOUND' });
+  });
+
+  it('reports flagd healthy and ready on its management port', async () => {
+    const statuses = await Promise.all(
+      ['/healthz', '/readyz'].map(async (path) => (await fetch(`${flagdManagement}${path}`)).status)
+    );
+
+    expect(statuses).toEqual([200, 200]);
+  });
+
+  it("carries flagd's own metrics to Prometheus", async () => {
+    const series = await eventually(async () => {
+      const promql = encodeURIComponent('count by (__name__) ({job="platform-flagd"})');
+      const result = await getJson(`${grafana}/prometheus/api/v1/query?query=${promql}`);
+      const found = (result?.data as { result?: unknown[] } | undefined)?.result ?? [];
+      return found.length > 0 ? found : undefined;
+    }, 120_000);
+
+    expect(series.length).toBeGreaterThan(0);
+  });
+
   it('ships the logs of containers on the zigordev network to Loki', async () => {
     const expected = [
       'platform-alloy',
+      'platform-flagd',
       'platform-lgtm',
       'platform-mailpit',
       'platform-notifications-api',

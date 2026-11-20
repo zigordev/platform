@@ -7,8 +7,9 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - `local/compose.yaml`: the local platform. Its project is `platform-local`, its containers are named `platform-*`, and its network is `zigordev`. Besides the shared services, it runs the apps other apps call from their released images: notifications-api, after its migration job ([ADR 0006](docs/adr/0006-local-platform-runs-released-apps.md)).
 - `local/notifications-producers.json` holds the local producer keys, and `local/notifications-api.env` their hashes for notifications-api. Both are git-ignored and written by the scripts.
 - `stack/alloy/config.alloy`: the Alloy pipeline for both the local platform and production. Only environment variables differ.
-- `apps/<app>/app.yaml`: the registry. An app's folder is named after the app.
-- `src/` holds the registry reader, the database provisioning and the local producer keys, `scripts/` the commands that run them, and `test/` the test setup and the local stack check.
+- `apps/<app>/app.yaml`: the registry. An app's folder is named after the app. `apps/<app>/flags.json` holds the app's feature flags, which flagd serves to that app only ([ADR 0007](docs/adr/0007-flagd-serves-each-apps-flags.md)).
+- `local/.env` holds the list of flags files that compose passes to flagd. It is git-ignored and written by `pnpm local:up`.
+- `src/` holds the registry reader, the database provisioning, the flags reader and the local producer keys, `scripts/` the commands that run them, and `test/` the test setup and the local stack check.
 - `infra/<stack>/`: OpenTofu stacks. `infra/bootstrap/` keeps the state bucket, the state key and the CI roles.
 - `docs/adr/`: this repo's decision records. The estate-wide ones live in toolkit.
 
@@ -23,6 +24,9 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 
 - The platform's containers, volumes and network are its own. Never stop, recreate or reconfigure a container outside the `platform-local` project.
 - Alloy reads logs only from containers on the `zigordev` network. Keep that filter, so no other container's logs are read.
+- A flags file's `flagSetId` is its app's name, and every flag has a `defaultVariant` and a `removeBy` date. `pnpm run check` fails on a flag past its date: remove it, or move the date in the same PR.
+- flagd's image has no shell or HTTP client, so it is the one container without a compose healthcheck. `pnpm local:check` probes its health and readiness.
+- flagd sends its metrics through the standard `OTEL_*` variables, to Alloy's OTLP HTTP endpoint like the apps. Its own `--otel-collector-uri` flag sets the endpoint without a scheme, which the exporter cannot parse, so nothing arrives.
 - Images are pinned to exact versions, at least three days old, and Renovate proposes their updates. The estate's own images from `ghcr.io/zigordev` are pinned by tag and digest and follow their releases at once (toolkit ADR 0035).
 - An app runs here only from its released image, never from a working copy. Its migration job runs first from the same image, and its version appears only in the image tag, so a Renovate bump is the only edit a release needs.
 - Try a compose change under another project name, with an extra compose file that overrides `container_name`, the ports (`!override`) and the network name, so the running `platform-local` containers are never touched.

@@ -45,5 +45,6 @@ The decisions are recorded in toolkit's ADRs 0013 to 0016:
 - Caddy routes and terminates TLS from labels on each app's containers, with DNS in Cloudflare.
 - PostgreSQL 18 holds every app's database, provisioned from the registry by the same code the local platform uses. Backups run nightly to S3, with a weekly restore drill.
 - Alloy runs `stack/alloy/config.alloy` with Grafana Cloud as its destination.
+- flagd serves each app's `flags.json` from this repo, so a flag change deploys like any other commit.
 - Secrets are SOPS files encrypted with age, decrypted on the host.
 - Amazon SES sends email, with production access requested on the first day of the cloud work, because AWS's review takes time.
