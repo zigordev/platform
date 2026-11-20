@@ -8,9 +8,10 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - `local/notifications-producers.json` holds the local producer keys, and `local/notifications-api.env` their hashes for notifications-api. Both are git-ignored and written by the scripts.
 - `stack/alloy/config.alloy`: the Alloy pipeline for both the local platform and production. Only environment variables differ.
 - `apps/<app>/app.yaml`: the registry. An app's folder is named after the app. `apps/<app>/flags.json` holds the app's feature flags, which flagd serves to that app only ([ADR 0007](docs/adr/0007-flagd-serves-each-apps-flags.md)).
+- `apps/<app>/observability.ts` adds an app's own dashboard rows to its standard dashboard ([ADR 0010](docs/adr/0010-dashboards-are-code-from-the-registry.md)). `pnpm local:up` writes every dashboard to the git-ignored `local/grafana/`, which otel-lgtm mounts.
 - An `app.yaml` with `local: true` marks an app that runs only on laptops, such as the playground. `appsFor('production', ...)` leaves it out ([ADR 0008](docs/adr/0008-local-only-apps-in-the-registry.md)).
 - `local/.env` holds what compose reads at start: the flags files for flagd, and `ALLOY_CONFIG_SHA`, the hash of Alloy's config, so a changed config recreates Alloy. It is git-ignored and written by `pnpm local:up`.
-- `src/` holds the registry reader, the database provisioning, the flags reader and the local producer keys, `scripts/` the commands that run them, and `test/` the test setup and the local stack check.
+- `src/` holds the registry reader, the database provisioning, the flags reader, the local producer keys and, in `src/observability/`, the dashboards built with the Grafana Foundation SDK, `scripts/` the commands that run them, and `test/` the test setup and the local stack check.
 - `infra/<stack>/`: OpenTofu stacks. `infra/bootstrap/` keeps the state bucket, the state key and the CI roles.
 - `docs/adr/`: this repo's decision records. The estate-wide ones live in toolkit.
 
@@ -25,6 +26,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 
 - The platform's containers, volumes and network are its own. Never stop, recreate or reconfigure a container outside the `platform-local` project.
 - Alloy reads logs only from containers on the `zigordev` network. Keep that filter, so no other container's logs are read.
+- Every dashboard query is scoped to its app: Prometheus by `job="<app>"`, Loki by `service_name="<app>"`. Run a new query against the local Prometheus or Loki before it goes in.
 - Alloy's Faro receiver never downloads sourcemaps, and takes its allowed origins from `FARO_ALLOWED_ORIGINS` ([ADR 0009](docs/adr/0009-alloy-receives-browser-telemetry.md)).
 - A flags file's `flagSetId` is its app's name, and every flag has a `defaultVariant` and a `removeBy` date. `pnpm run check` fails on a flag past its date: remove it, or move the date in the same PR.
 - flagd's image has no shell or HTTP client, so it is the one container without a compose healthcheck. `pnpm local:check` probes its health and readiness.

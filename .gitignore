@@ -9,3 +9,4 @@ coverage/
 local/notifications-producers.json
 local/notifications-api.env
 local/.env
+local/grafana/

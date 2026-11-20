@@ -44,7 +44,7 @@ The decisions are recorded in toolkit's ADRs 0013 to 0016:
 - doco-cd polls this repo every minute and applies each `apps/<app>/` folder with Docker Compose. A deploy is a commit, and a rollback is `git revert`.
 - Caddy routes and terminates TLS from labels on each app's containers, with DNS in Cloudflare.
 - PostgreSQL 18 holds every app's database, provisioned from the registry by the same code the local platform uses. Backups run nightly to S3, with a weekly restore drill.
-- Alloy runs `stack/alloy/config.alloy` with Grafana Cloud as its destination.
+- Alloy runs `stack/alloy/config.alloy` with Grafana Cloud as its destination, and the same dashboard builders that the local Grafana uses produce Grafana Cloud's dashboards.
 - Browsers send real user monitoring to Alloy's Faro receiver, through a public route or Grafana Cloud's collector, decided with the host ([ADR 0009](adr/0009-alloy-receives-browser-telemetry.md)).
 - flagd serves each app's `flags.json` from this repo, so a flag change deploys like any other commit.
 - Secrets are SOPS files encrypted with age, decrypted on the host.

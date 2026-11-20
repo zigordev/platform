@@ -71,7 +71,7 @@ It starts PostgreSQL and gives every app in `apps/` that asks for a database its
 
 - Every port listens on `127.0.0.1` only.
 - PostgreSQL trusts local connections, so there are no passwords to keep in git. Never publish its port beyond the laptop.
-- Grafana opens without a login, as an administrator, because nothing in it leaves the laptop.
+- Grafana opens without a login, as an administrator, because nothing in it leaves the laptop. The `zigordev` folder holds a dashboard for every registered app and one for the platform.
 - Port 3000 stays free for the first Next.js app.
 - `platform-notifications-api-migrate` applies notifications-api's migrations from the same image, then exits.
 - `pnpm local:up` recreates Alloy when `stack/alloy/config.alloy` changes, because it passes the file's hash to compose.
@@ -96,7 +96,7 @@ It answers `202`, and the email is in Mailpit at <http://127.0.0.1:8025> within 
 
 - `pnpm local:down` stops the containers and keeps PostgreSQL's data.
 - `pnpm local:reset` deletes the data and starts again, with the databases provisioned afresh. It keeps the producer keys in `local/notifications-producers.json`.
-- Telemetry lives inside the otel-lgtm container, so it goes whenever that container is recreated.
+- Telemetry lives in the `lgtm-data` volume: it survives `pnpm local:down` and a recreated otel-lgtm container, and goes with `pnpm local:reset`.
 
 ## Check a change the way CI does
 

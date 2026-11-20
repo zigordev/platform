@@ -6,6 +6,7 @@
   },
   "include": [
     "${configDir}/src",
+    "${configDir}/apps",
     "${configDir}/scripts",
     "${configDir}/test",
     "${configDir}/*.config.ts"

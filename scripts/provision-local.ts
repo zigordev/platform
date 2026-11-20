@@ -3,6 +3,7 @@ import { fileSha256, writeComposeEnv } from '../src/compose-env.ts';
 import { readConfig } from '../src/config.ts';
 import { provisionDatabases } from '../src/database.ts';
 import { provisionFlags } from '../src/flags.ts';
+import { provisionDashboards } from '../src/observability/provision.ts';
 import { provisionProducers } from '../src/producers.ts';
 import { appsFor, readApps } from '../src/registry.ts';
 
@@ -36,3 +37,9 @@ for (const expired of flags.expired) {
     removeBy: expired.removeBy,
   });
 }
+const dashboards = await provisionDashboards(
+  config.PLATFORM_APPS_DIR,
+  config.PLATFORM_LOCAL_DIR,
+  apps
+);
+logger.info({ event: 'platform.dashboards_written', dashboards: dashboards.dashboards });
