@@ -58,21 +58,23 @@ pnpm install
 pnpm local:up
 ```
 
-It starts PostgreSQL and gives every app in `apps/` that asks for a database its own database and role. It makes sure notifications has its local producer keys, starts the other containers, runs notifications-api's migration job, and waits until every container reports healthy. It prints one line per database and one for the producers.
+It starts PostgreSQL and gives every app in `apps/` that asks for a database its own database and role. It makes sure notifications has its local producer keys, writes the list of flags files for flagd, starts the other containers, runs notifications-api's migration job, and waits until every container reports healthy. It prints one line per database, one for the producers and one for the flags.
 
-| Service           | Container                    | On the laptop                                               | What it does                                                                          |
-| ----------------- | ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| PostgreSQL        | `platform-postgres`          | `127.0.0.1:5432`                                            | PostgreSQL 18, one database and role per app                                          |
-| Mailpit           | `platform-mailpit`           | SMTP on `127.0.0.1:1025`, web on `http://127.0.0.1:8025`    | Catches every email, so nothing leaves the laptop                                     |
-| Alloy             | `platform-alloy`             | OTLP on `127.0.0.1:4317` (gRPC) and `127.0.0.1:4318` (HTTP) | Receives traces, metrics and logs, and tails container logs                           |
-| otel-lgtm         | `platform-lgtm`              | Grafana on `http://127.0.0.1:3300`                          | Grafana with Tempo, Loki and Prometheus behind it                                     |
-| notifications-api | `platform-notifications-api` | `http://127.0.0.1:3001`                                     | The released notifications-api, which apps send email through. It delivers to Mailpit |
+| Service           | Container                    | On the laptop                                                                                                           | What it does                                                                          |
+| ----------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| PostgreSQL        | `platform-postgres`          | `127.0.0.1:5432`                                                                                                        | PostgreSQL 18, one database and role per app                                          |
+| Mailpit           | `platform-mailpit`           | SMTP on `127.0.0.1:1025`, web on `http://127.0.0.1:8025`                                                                | Catches every email, so nothing leaves the laptop                                     |
+| Alloy             | `platform-alloy`             | OTLP on `127.0.0.1:4317` (gRPC) and `127.0.0.1:4318` (HTTP)                                                             | Receives traces, metrics and logs, and tails container logs                           |
+| otel-lgtm         | `platform-lgtm`              | Grafana on `http://127.0.0.1:3300`                                                                                      | Grafana with Tempo, Loki and Prometheus behind it                                     |
+| notifications-api | `platform-notifications-api` | `http://127.0.0.1:3001`                                                                                                 | The released notifications-api, which apps send email through. It delivers to Mailpit |
+| flagd             | `platform-flagd`             | OFREP on `http://127.0.0.1:8016`, gRPC on `127.0.0.1:8013`, sync on `127.0.0.1:8015`, health on `http://127.0.0.1:8014` | Serves each app the feature flags in its `apps/<app>/flags.json`                      |
 
 - Every port listens on `127.0.0.1` only.
 - PostgreSQL trusts local connections, so there are no passwords to keep in git. Never publish its port beyond the laptop.
 - Grafana opens without a login, as an administrator, because nothing in it leaves the laptop.
 - Port 3000 stays free for the first Next.js app.
 - `platform-notifications-api-migrate` applies notifications-api's migrations from the same image, then exits.
+- flagd reloads an edited flags file within seconds. A new flags file needs `pnpm local:up`, which recreates flagd with it.
 
 ## Send a first email
 

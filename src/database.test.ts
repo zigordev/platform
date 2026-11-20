@@ -111,12 +111,27 @@ describe('provisionDatabases', () => {
 });
 
 describe('the provision-local script', () => {
-  it('provisions the registry and the producers it is pointed at, and logs what it did', async () => {
+  it('provisions the registry, the producers and the flags it is pointed at, and logs what it did', async () => {
     const app = uniqueApp();
     const appsDir = await mkdtemp(join(tmpdir(), 'platform-apps-'));
     const localDir = await mkdtemp(join(tmpdir(), 'platform-local-'));
     await mkdir(join(appsDir, app));
     await writeFile(join(appsDir, app, 'app.yaml'), `name: ${app}\ndatabase: true\n`);
+    await writeFile(
+      join(appsDir, app, 'flags.json'),
+      JSON.stringify({
+        $schema: 'https://flagd.dev/schema/v0/flags.json',
+        metadata: { flagSetId: app },
+        flags: {
+          'old-banner': {
+            state: 'ENABLED',
+            variants: { on: true, off: false },
+            defaultVariant: 'off',
+            metadata: { removeBy: '2026-01-31' },
+          },
+        },
+      })
+    );
     try {
       const { stdout } = await run(process.execPath, ['scripts/provision-local.ts'], {
         env: {
@@ -143,8 +158,21 @@ describe('the provision-local script', () => {
           producers: ['local-dev'],
           service: 'platform-provision',
         }),
+        expect.objectContaining({
+          event: 'platform.flags_served',
+          apps: [app],
+          service: 'platform-provision',
+        }),
+        expect.objectContaining({
+          event: 'platform.flag_expired',
+          level: 'warn',
+          app,
+          flag: 'old-banner',
+          removeBy: '2026-01-31',
+        }),
       ]);
-      expect(await readdir(localDir)).toEqual([
+      expect((await readdir(localDir)).sort()).toEqual([
+        '.env',
         'notifications-api.env',
         'notifications-producers.json',
       ]);

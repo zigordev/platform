@@ -4,14 +4,14 @@ Where every zigordev app runs, described in code: the shared services, the infra
 
 ## What it is
 
-| Path                       | Holds                                                                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `local/compose.yaml`       | The local platform: PostgreSQL 18, Mailpit, Grafana Alloy, Grafana's otel-lgtm image and the released notifications-api, on the `zigordev` Docker network |
-| `stack/alloy/config.alloy` | The Alloy pipeline, shared by the local platform and production, with only environment variables telling them apart                                       |
-| `apps/<app>/app.yaml`      | The app registry, one folder per app. Each app that asks for a database gets its own database and role                                                    |
-| `infra/bootstrap/`         | OpenTofu that creates what every other stack needs first: the encrypted state bucket, its KMS key, and the roles CI plans and applies with                |
-| `src/` and `scripts/`      | The registry reader, the database provisioning and the local producer keys for notifications, with their tests                                            |
-| `docs/`                    | How to run it, how apps use it, a tutorial and the decision records                                                                                       |
+| Path                       | Holds                                                                                                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local/compose.yaml`       | The local platform: PostgreSQL 18, Mailpit, Grafana Alloy, Grafana's otel-lgtm image, flagd and the released notifications-api, on the `zigordev` Docker network                                            |
+| `stack/alloy/config.alloy` | The Alloy pipeline, shared by the local platform and production, with only environment variables telling them apart                                                                                         |
+| `apps/<app>/`              | The app registry, one folder per app: `app.yaml`, and `flags.json` for an app with feature flags. Each app that asks for a database gets its own database and role, and flagd serves each app its own flags |
+| `infra/bootstrap/`         | OpenTofu that creates what every other stack needs first: the encrypted state bucket, its KMS key, and the roles CI plans and applies with                                                                  |
+| `src/` and `scripts/`      | The registry reader, the database provisioning and the local producer keys for notifications, with their tests                                                                                              |
+| `docs/`                    | How to run it, how apps use it, a tutorial and the decision records                                                                                                                                         |
 
 Later in Phase 2, more of `infra/`, `host/` (cloud-init, systemd units, doco-cd) and `observability/` join it.
 
@@ -21,7 +21,7 @@ The legacy estate ran 14 shared services on its production host and seven local 
 
 ## Technologies and tools
 
-Docker Compose, PostgreSQL 18, Mailpit, Grafana Alloy, grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus, and notifications-api's released image. OpenTofu 1.13 with tflint and trivy, sops and age. Node.js 26, TypeScript 7 and pnpm 12, all pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
+Docker Compose, PostgreSQL 18, Mailpit, flagd for OpenFeature, Grafana Alloy, grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus, and notifications-api's released image. OpenTofu 1.13 with tflint and trivy, sops and age. Node.js 26, TypeScript 7 and pnpm 12, all pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
 
 ## Dependencies
 
@@ -37,4 +37,4 @@ pnpm install
 pnpm local:up
 ```
 
-mise has to be active in your shell, or each command prefixed with `mise exec --`, as [local first start](docs/local-first-start.md#activate-mise) shows. Grafana opens at <http://127.0.0.1:3300>, Mailpit at <http://127.0.0.1:8025>, and notifications-api answers at <http://127.0.0.1:3001>. [Local first start](docs/local-first-start.md) has the details, the [user manual](docs/user-manual.md) shows how an app uses the platform, and the [tutorial](docs/tutorials/run-an-app-locally.md) walks through it.
+mise has to be active in your shell, or each command prefixed with `mise exec --`, as [local first start](docs/local-first-start.md#activate-mise) shows. Grafana opens at <http://127.0.0.1:3300>, Mailpit at <http://127.0.0.1:8025>, notifications-api answers at <http://127.0.0.1:3001>, and flagd's OFREP at <http://127.0.0.1:8016>. [Local first start](docs/local-first-start.md) has the details, the [user manual](docs/user-manual.md) shows how an app uses the platform, and the [tutorial](docs/tutorials/run-an-app-locally.md) walks through it.

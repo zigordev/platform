@@ -63,16 +63,50 @@ docker compose --file local/compose.yaml stop notifications-api
 
 `pnpm local:up` brings the released image back.
 
+## Use feature flags
+
+An app's flags live in `apps/<app>/flags.json`, in flagd's format, and flagd serves them to that app only ([ADR 0007](adr/0007-flagd-serves-each-apps-flags.md), toolkit ADR 0012):
+
+```json
+{
+  "$schema": "https://flagd.dev/schema/v0/flags.json",
+  "metadata": { "flagSetId": "gpool-api" },
+  "flags": {
+    "new-checkout": {
+      "state": "ENABLED",
+      "variants": { "on": true, "off": false },
+      "defaultVariant": "off",
+      "metadata": { "removeBy": "2027-03-31" }
+    }
+  }
+}
+```
+
+- `flagSetId` is the app's name, and flag keys are kebab-case.
+- Every flag has a `defaultVariant` and a `removeBy` date. `pnpm run check` fails once a flag is past its date, so remove the flag, or move the date in the same PR.
+- `targeting` takes flagd's rules, such as a variant for some users. There is no toggle UI: a change is a PR.
+- flagd reloads an edited file within seconds. A new `flags.json` needs `pnpm local:up`, which recreates flagd with it.
+
+The app reads its flags through OpenFeature, always with the selector `flagSetId=<app>`:
+
+| Reader                      | Local settings                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Server, flagd provider      | `FLAGD_RESOLVER=in-process`, `FLAGD_HOST=127.0.0.1`, `FLAGD_PORT=8015` and `FLAGD_SOURCE_SELECTOR=flagSetId=<app>` |
+| Browser, OFREP web provider | Base URL `http://127.0.0.1:8016`, with the header `flagd-selector: flagSetId=<app>`                                |
+
+A flag of another app answers `FLAG_NOT_FOUND`, and when flagd is down the provider returns each flag's default.
+
 ## Run the app in a container
 
 A container joins the `zigordev` network and reaches the services by name, the same names production uses:
 
-| Service           | Address on the `zigordev` network |
-| ----------------- | --------------------------------- |
-| PostgreSQL        | `postgres:5432`                   |
-| Alloy             | `http://alloy:4318`               |
-| Mailpit           | `mailpit:1025`                    |
-| notifications-api | `http://notifications-api:3000`   |
+| Service           | Address on the `zigordev` network                                    |
+| ----------------- | -------------------------------------------------------------------- |
+| PostgreSQL        | `postgres:5432`                                                      |
+| Alloy             | `http://alloy:4318`                                                  |
+| Mailpit           | `mailpit:1025`                                                       |
+| notifications-api | `http://notifications-api:3000`                                      |
+| flagd             | `flagd:8015` for in-process providers, `http://flagd:8016` for OFREP |
 
 Alloy also tails the logs of every container on the `zigordev` network into Loki, and reads no other container's logs.
 
