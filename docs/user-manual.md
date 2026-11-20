@@ -177,7 +177,7 @@ A container joins the `zigordev` network and reaches the services by name, the s
 | notifications-api | `http://notifications-api:3000`                                      |
 | flagd             | `flagd:8015` for in-process providers, `http://flagd:8016` for OFREP |
 
-Alloy also tails the logs of every container on the `zigordev` network into Loki, and reads no other container's logs.
+Alloy also tails the logs of every container on the `zigordev` network into Loki, labelled `service_name` with the container's compose service, which the estate names after the app, and reads no other container's logs.
 
 ## Limits
 

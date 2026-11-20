@@ -506,13 +506,13 @@ describe('the local platform', () => {
     expect(containers).toEqual(expect.arrayContaining(expected));
   });
 
-  it('ships the lines notifications-api writes now to Loki', async () => {
+  it('ships the lines notifications-api writes now to Loki, under its app name', async () => {
     const response = await sendThroughNotifications(`Log check ${randomUUID()}`);
     const { id } = (await response.json()) as { id: string };
 
     const line = await eventually(async () => {
       const logql = encodeURIComponent(
-        `{container="platform-notifications-api"} |= "email.accepted" |= "${id}"`
+        `{service_name="notifications-api", container="platform-notifications-api"} |= "email.accepted" |= "${id}"`
       );
       const result = await getJson(
         `${grafana}/loki/loki/api/v1/query_range?query=${logql}&since=10m&limit=1`
