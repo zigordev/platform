@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -111,9 +111,10 @@ describe('provisionDatabases', () => {
 });
 
 describe('the provision-local script', () => {
-  it('provisions the registry it is pointed at and logs one event per database', async () => {
+  it('provisions the registry and the producers it is pointed at, and logs what it did', async () => {
     const app = uniqueApp();
     const appsDir = await mkdtemp(join(tmpdir(), 'platform-apps-'));
+    const localDir = await mkdtemp(join(tmpdir(), 'platform-local-'));
     await mkdir(join(appsDir, app));
     await writeFile(join(appsDir, app, 'app.yaml'), `name: ${app}\ndatabase: true\n`);
     try {
@@ -122,6 +123,7 @@ describe('the provision-local script', () => {
           PATH: process.env.PATH ?? '',
           PLATFORM_DATABASE_URL: adminUrl,
           PLATFORM_APPS_DIR: appsDir,
+          PLATFORM_LOCAL_DIR: localDir,
         },
       });
       const events = stdout
@@ -136,9 +138,19 @@ describe('the provision-local script', () => {
           database: databaseName(app),
           service: 'platform-provision',
         }),
+        expect.objectContaining({
+          event: 'platform.producer_created',
+          producers: ['local-dev'],
+          service: 'platform-provision',
+        }),
+      ]);
+      expect(await readdir(localDir)).toEqual([
+        'notifications-api.env',
+        'notifications-producers.json',
       ]);
     } finally {
       await rm(appsDir, { recursive: true, force: true });
+      await rm(localDir, { recursive: true, force: true });
     }
   }, 60_000);
 });

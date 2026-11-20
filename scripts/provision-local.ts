@@ -1,6 +1,7 @@
 import { createLogger } from '@zigordev/otel';
 import { readConfig } from '../src/config.ts';
 import { provisionDatabases } from '../src/database.ts';
+import { provisionProducers } from '../src/producers.ts';
 import { readApps } from '../src/registry.ts';
 
 const config = readConfig();
@@ -16,3 +17,8 @@ for (const result of results) {
     database: result.database,
   });
 }
+const producers = await provisionProducers(config.PLATFORM_LOCAL_DIR);
+logger.info({
+  event: producers.created ? 'platform.producer_created' : 'platform.producers_present',
+  producers: producers.names,
+});

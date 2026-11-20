@@ -11,10 +11,11 @@
   },
   "scripts": {
     "prepare": "lefthook install",
-    "local:up": "docker compose --file local/compose.yaml up --detach --wait && node scripts/provision-local.ts",
+    "local:up": "docker compose --file local/compose.yaml up --detach --wait postgres && node scripts/provision-local.ts && docker compose --file local/compose.yaml up --detach --wait",
     "local:down": "docker compose --file local/compose.yaml down",
     "local:reset": "docker compose --file local/compose.yaml down --volumes && pnpm run local:up",
     "local:check": "vitest run --project local-stack",
+    "local:producer-key": "node scripts/producer-key.ts",
     "lint": "biome ci .",
     "format": "biome check --write .",
     "format:check": "biome format .",

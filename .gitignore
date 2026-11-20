@@ -6,3 +6,5 @@ coverage/
 *.tfstate
 *.tfstate.*
 *.tfplan
+local/notifications-producers.json
+local/notifications-api.env
