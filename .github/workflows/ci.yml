@@ -16,14 +16,14 @@ concurrency:
 jobs:
   repo:
     name: Repo
-    uses: zigordev/toolkit/.github/workflows/repo-checks.yml@06f81d27c38f31c78b4bc963808d41ac0062b178 # workflows-v0.2.0
+    uses: zigordev/toolkit/.github/workflows/repo-checks.yml@642caa98f0d3155512bb9efb2ffb5dfb163e7b77 # workflows-v0.3.0
     permissions:
       contents: read
       pull-requests: read
 
   node:
     name: Node
-    uses: zigordev/toolkit/.github/workflows/node-ci.yml@06f81d27c38f31c78b4bc963808d41ac0062b178 # workflows-v0.2.0
+    uses: zigordev/toolkit/.github/workflows/node-ci.yml@642caa98f0d3155512bb9efb2ffb5dfb163e7b77 # workflows-v0.3.0
     permissions:
       contents: read
       packages: read
