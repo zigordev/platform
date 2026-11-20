@@ -99,6 +99,48 @@ services:
         condition: service_healthy
     networks: [zigordev]
 
+  notifications-api-migrate:
+    image: ghcr.io/zigordev/notifications-api:0.3.0@sha256:833d1fd4c41de56402274e80fc7f18693e0b0cf60fc78b34e9b01722cd17f004
+    container_name: platform-notifications-api-migrate
+    command: [node, src/migrate.ts]
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      DATABASE_URL: postgresql://notifications_api@postgres:5432/notifications_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [zigordev]
+
+  notifications-api:
+    image: ghcr.io/zigordev/notifications-api:0.3.0@sha256:833d1fd4c41de56402274e80fc7f18693e0b0cf60fc78b34e9b01722cd17f004
+    container_name: platform-notifications-api
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    env_file:
+      - path: notifications-api.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://notifications_api@postgres:5432/notifications_api
+      OTEL_SERVICE_NAME: notifications-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+    ports:
+      - 127.0.0.1:3001:3000
+    depends_on:
+      notifications-api-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    networks: [zigordev]
+
 networks:
   zigordev:
     name: zigordev

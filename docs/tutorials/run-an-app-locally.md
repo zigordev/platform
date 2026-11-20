@@ -44,19 +44,29 @@ Open Grafana at <http://127.0.0.1:3300>, choose Explore, then Tempo, and search 
 
 ## 5. Send an email
 
-Any SMTP client pointed at `127.0.0.1:1025` delivers to Mailpit. With `curl`:
+Apps send email through notifications-api, never to SMTP directly. Give the tutorial app its own producer key, then restart notifications-api with it:
 
 ```bash
-printf 'Subject: Hello from the tutorial\r\n\r\nIt works.\r\n' > /tmp/tutorial-mail.txt
-curl -s smtp://127.0.0.1:1025 --mail-from app@tutorial.test --mail-rcpt you@tutorial.test --upload-file /tmp/tutorial-mail.txt
+pnpm local:producer-key tutorial-app app@tutorial.test
+pnpm local:up
 ```
 
-Open Mailpit at <http://127.0.0.1:8025>, and the email is in the inbox.
+The first command prints the key. Send an email with it, as the app's notifications client would:
+
+```bash
+curl -i http://127.0.0.1:3001/api/v1/emails \
+  -H 'authorization: Bearer <the printed key>' \
+  -H 'idempotency-key: tutorial:first-email' \
+  -H 'content-type: application/json' \
+  -d '{"from":{"email":"app@tutorial.test"},"to":{"email":"you@tutorial.test"},"subject":"Hello from the tutorial","text":"It works."}'
+```
+
+It answers `202`. Open Mailpit at <http://127.0.0.1:8025>, and the email is in the inbox. Send it again from another address, and notifications refuses it with `403`: each app sends only as its own senders.
 
 ## 6. Clean up
 
-Delete `apps/tutorial-app/`, then run `pnpm local:reset` to start again from the registry, or `pnpm local:down` to stop.
+Delete `apps/tutorial-app/` and the `tutorial-app` entry in `local/notifications-producers.json`, then run `pnpm local:reset` to start again from the registry, or `pnpm local:down` to stop.
 
 ## What you have seen
 
-An app gets its own database by adding one folder, and it reaches the platform through the same settings it will have in production. The [user manual](../user-manual.md) lists them.
+An app gets its own database by adding one folder and its own sender with one command, and it reaches the platform through the same settings it will have in production. The [user manual](../user-manual.md) lists them.

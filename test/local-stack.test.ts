@@ -2,10 +2,13 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { connect } from 'node:net';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
+import { readConfig } from '../src/config.ts';
+import { defaultProducer, readProducers } from '../src/producers.ts';
 
 const grafana = 'http://127.0.0.1:3300/api/datasources/proxy/uid';
 const otlp = 'http://127.0.0.1:4318';
 const mailpit = 'http://127.0.0.1:8025';
+const notifications = 'http://127.0.0.1:3001';
 
 async function eventually<T>(probe: () => Promise<T | undefined>, timeoutMs = 60_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -41,6 +44,24 @@ async function postOtlp(signal: 'traces' | 'metrics', body: unknown): Promise<vo
     body: JSON.stringify(body),
   });
   expect(response.status).toBe(200);
+}
+
+function findMail(subject: string): Promise<Record<string, unknown>> {
+  return eventually(async () => {
+    const result = await getJson(
+      `${mailpit}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
+    );
+    return Number(result?.messages_count) > 0 ? result : undefined;
+  });
+}
+
+async function localDevKey(): Promise<string> {
+  const producers = await readProducers(readConfig().PLATFORM_LOCAL_DIR);
+  const localDev = producers.find((producer) => producer.name === defaultProducer.name);
+  if (localDev === undefined) {
+    throw new Error('local-dev is missing from the producers file; pnpm local:up adds it');
+  }
+  return localDev.key;
 }
 
 function sendMail(subject: string): Promise<void> {
@@ -107,14 +128,40 @@ describe('the local platform', () => {
     const subject = `Local stack check ${randomUUID()}`;
     await sendMail(subject);
 
-    const found = await eventually(async () => {
-      const result = await getJson(
-        `${mailpit}/api/v1/search?query=${encodeURIComponent(`subject:"${subject}"`)}`
-      );
-      return Number(result?.messages_count) > 0 ? result : undefined;
-    });
+    const found = await findMail(subject);
 
     expect(Number(found.messages_count)).toBe(1);
+  });
+
+  it('runs notifications-api from its released image, with its database and Mailpit up', async () => {
+    const health = await eventually(() => getJson(`${notifications}/health`));
+
+    expect(health).toEqual({
+      status: 'ok',
+      service: 'notifications-api',
+      components: { db: { status: 'up' }, provider: { status: 'up' } },
+    });
+  });
+
+  it('delivers an email sent through notifications-api into Mailpit', async () => {
+    const subject = `Notifications check ${randomUUID()}`;
+    const response = await fetch(`${notifications}/api/v1/emails`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await localDevKey()}`,
+        'idempotency-key': `platform-local-check:${randomUUID()}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: { email: defaultProducer.senders[0], name: 'platform local check' },
+        to: { email: 'inbox@platform.test' },
+        subject,
+        text: 'From the local stack check, through notifications-api.',
+      }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(Number((await findMail(subject)).messages_count)).toBe(1);
   });
 
   it('carries a trace sent to Alloy into Tempo', async () => {
@@ -192,19 +239,19 @@ describe('the local platform', () => {
   });
 
   it('ships the logs of containers on the zigordev network to Loki', async () => {
+    const expected = [
+      'platform-alloy',
+      'platform-lgtm',
+      'platform-mailpit',
+      'platform-notifications-api',
+      'platform-postgres',
+    ];
     const containers = await eventually(async () => {
       const result = await getJson(`${grafana}/loki/loki/api/v1/label/container/values`);
       const values = (result?.data as string[] | undefined) ?? [];
-      return values.includes('platform-postgres') ? values : undefined;
-    });
+      return expected.every((name) => values.includes(name)) ? values : undefined;
+    }, 120_000);
 
-    expect(containers).toEqual(
-      expect.arrayContaining([
-        'platform-alloy',
-        'platform-lgtm',
-        'platform-mailpit',
-        'platform-postgres',
-      ])
-    );
+    expect(containers).toEqual(expect.arrayContaining(expected));
   });
 });
