@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -7,7 +7,6 @@ import {
   expiredFlags,
   FlagsError,
   type FlagsFile,
-  flagdEnv,
   flagdSources,
   flagsSchemaUrl,
   provisionFlags,
@@ -18,7 +17,6 @@ import { readApps } from './registry.ts';
 
 let root: string;
 let appsDir: string;
-let localDir: string;
 
 function flagsFile(flagSetId: string, flags: Record<string, unknown>): Record<string, unknown> {
   return { $schema: flagsSchemaUrl, metadata: { flagSetId }, flags };
@@ -42,9 +40,7 @@ async function addFlags(app: string, content: unknown): Promise<void> {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'platform-flags-'));
   appsDir = join(root, 'apps');
-  localDir = join(root, 'local');
   await mkdir(appsDir);
-  await mkdir(localDir);
 });
 
 afterEach(async () => {
@@ -177,33 +173,31 @@ describe('flagd sources', () => {
       { uri: '/apps/cv-web/flags.json', provider: 'file' },
       { uri: '/apps/gpool-api/flags.json', provider: 'file' },
     ]);
-    expect(flagdEnv(flags)).toBe(`FLAGD_SOURCES='${flagdSources(flags)}'\n`);
   });
 });
 
 describe('provisionFlags', () => {
-  it('writes the sources for compose and reports the expired flags', async () => {
+  it("gives compose flagd's sources and reports the expired flags", async () => {
     await addFlags(
       'cv-web',
       flagsFile('cv-web', { greeting: { ...greeting, metadata: { removeBy: '2026-01-31' } } })
     );
 
-    const result = await provisionFlags(appsDir, localDir, [{ name: 'cv-web' }], '2026-11-20');
+    const result = await provisionFlags(appsDir, [{ name: 'cv-web' }], '2026-11-20');
 
     expect(result).toEqual({
       apps: ['cv-web'],
       expired: [{ app: 'cv-web', flag: 'greeting', removeBy: '2026-01-31' }],
+      sources: '[{"uri":"/apps/cv-web/flags.json","provider":"file"}]',
     });
-    expect(await readFile(join(localDir, '.env'), 'utf8')).toBe(
-      `FLAGD_SOURCES='[{"uri":"/apps/cv-web/flags.json","provider":"file"}]'\n`
-    );
   });
 
-  it('writes an empty source list when no app has flags', async () => {
-    const result = await provisionFlags(appsDir, localDir, [], '2026-11-20');
-
-    expect(result).toEqual({ apps: [], expired: [] });
-    expect(await readFile(join(localDir, '.env'), 'utf8')).toBe("FLAGD_SOURCES='[]'\n");
+  it('gives an empty source list when no app has flags', async () => {
+    expect(await provisionFlags(appsDir, [], '2026-11-20')).toEqual({
+      apps: [],
+      expired: [],
+      sources: '[]',
+    });
   });
 });
 

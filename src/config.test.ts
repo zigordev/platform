@@ -7,6 +7,7 @@ describe('readConfig', () => {
       PLATFORM_DATABASE_URL: 'postgresql://postgres@127.0.0.1:5432/postgres',
       PLATFORM_APPS_DIR: 'apps',
       PLATFORM_LOCAL_DIR: 'local',
+      PLATFORM_ALLOY_CONFIG: 'stack/alloy/config.alloy',
       LOG_LEVEL: 'info',
     });
   });
@@ -17,12 +18,14 @@ describe('readConfig', () => {
         PLATFORM_DATABASE_URL: 'postgresql://admin@db.internal:5432/postgres',
         PLATFORM_APPS_DIR: '/srv/platform/apps',
         PLATFORM_LOCAL_DIR: '/srv/platform/local',
+        PLATFORM_ALLOY_CONFIG: '/srv/platform/stack/alloy/config.alloy',
         LOG_LEVEL: 'debug',
       })
     ).toEqual({
       PLATFORM_DATABASE_URL: 'postgresql://admin@db.internal:5432/postgres',
       PLATFORM_APPS_DIR: '/srv/platform/apps',
       PLATFORM_LOCAL_DIR: '/srv/platform/local',
+      PLATFORM_ALLOY_CONFIG: '/srv/platform/stack/alloy/config.alloy',
       LOG_LEVEL: 'debug',
     });
   });

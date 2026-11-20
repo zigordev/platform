@@ -1,4 +1,5 @@
 import { createLogger } from '@zigordev/otel';
+import { fileSha256, writeComposeEnv } from '../src/compose-env.ts';
 import { readConfig } from '../src/config.ts';
 import { provisionDatabases } from '../src/database.ts';
 import { provisionFlags } from '../src/flags.ts';
@@ -21,7 +22,11 @@ logger.info({
   event: producers.created ? 'platform.producer_created' : 'platform.producers_present',
   producers: producers.names,
 });
-const flags = await provisionFlags(config.PLATFORM_APPS_DIR, config.PLATFORM_LOCAL_DIR, apps);
+const flags = await provisionFlags(config.PLATFORM_APPS_DIR, apps);
+await writeComposeEnv(config.PLATFORM_LOCAL_DIR, {
+  FLAGD_SOURCES: flags.sources,
+  ALLOY_CONFIG_SHA: await fileSha256(config.PLATFORM_ALLOY_CONFIG),
+});
 logger.info({ event: 'platform.flags_served', apps: flags.apps });
 for (const expired of flags.expired) {
   logger.warn({

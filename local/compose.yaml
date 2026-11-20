@@ -76,9 +76,12 @@ services:
       LOKI_DESTINATION: http://lgtm:3100/loki/api/v1/push
       LOKI_USERNAME: local
       LOKI_PASSWORD: local
+      FARO_ALLOWED_ORIGINS: "*"
+      ALLOY_CONFIG_SHA: ${ALLOY_CONFIG_SHA:-}
     ports:
       - 127.0.0.1:4317:4317
       - 127.0.0.1:4318:4318
+      - 127.0.0.1:12347:12347
     volumes:
       - ../stack/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
