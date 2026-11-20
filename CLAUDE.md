@@ -26,6 +26,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - Alloy reads logs only from containers on the `zigordev` network. Keep that filter, so no other container's logs are read.
 - A flags file's `flagSetId` is its app's name, and every flag has a `defaultVariant` and a `removeBy` date. `pnpm run check` fails on a flag past its date: remove it, or move the date in the same PR.
 - flagd's image has no shell or HTTP client, so it is the one container without a compose healthcheck. `pnpm local:check` probes its health and readiness.
+- flagd sends its metrics through the standard `OTEL_*` variables, to Alloy's OTLP HTTP endpoint like the apps. Its own `--otel-collector-uri` flag sets the endpoint without a scheme, which the exporter cannot parse, so nothing arrives.
 - Images are pinned to exact versions, at least three days old, and Renovate proposes their updates. The estate's own images from `ghcr.io/zigordev` are pinned by tag and digest and follow their releases at once (toolkit ADR 0035).
 - An app runs here only from its released image, never from a working copy. Its migration job runs first from the same image, and its version appears only in the image tag, so a Renovate bump is the only edit a release needs.
 - Try a compose change under another project name, with an extra compose file that overrides `container_name`, the ports (`!override`) and the network name, so the running `platform-local` containers are never touched.

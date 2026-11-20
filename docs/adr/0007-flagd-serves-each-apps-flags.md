@@ -15,7 +15,7 @@ Toolkit ADR 0012 has apps read feature flags through OpenFeature, from flagd ser
 - One flagd serves every app's file. `pnpm local:up` writes the list of files to the git-ignored `local/.env`, which compose reads, so a new flags file recreates flagd with it. flagd reloads an edited file within seconds.
 - An app scopes every request to its own flags with the selector `flagSetId=<app>`, set in its provider or sent as the `flagd-selector` header. A flag of another app answers `FLAG_NOT_FOUND`.
 - flagd listens on `127.0.0.1`: evaluation over gRPC on 8013, health and metrics on 8014, sync for in-process providers on 8015, and OFREP over HTTP on 8016. It allows any origin locally, because it holds no secrets and listens only on the laptop.
-- flagd sends its metrics to Alloy over OTLP and writes JSON logs. Its image has no shell or HTTP client, so compose cannot health-check it. `pnpm local:check` probes its health and readiness instead, and an alert on its metrics joins the dashboards.
+- flagd sends its metrics to Alloy over OTLP, through the standard `OTEL_*` variables like the apps, and writes JSON logs. Its image has no shell or HTTP client, so compose cannot health-check it. `pnpm local:check` probes its health and readiness instead, and an alert on its metrics joins the dashboards.
 
 ## Consequences
 

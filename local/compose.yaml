@@ -107,22 +107,12 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 10s
-    command:
-      [
-        start,
-        --sources,
-        "${FLAGD_SOURCES:-[]}",
-        --cors-origin,
-        "*",
-        --log-format,
-        json,
-        --metrics-exporter,
-        otel,
-        --otel-collector-uri,
-        alloy:4317,
-      ]
+    command: [start, --sources, "${FLAGD_SOURCES:-[]}", --cors-origin, "*", --log-format, json]
     environment:
       OTEL_SERVICE_NAME: platform-flagd
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - 127.0.0.1:8013:8013
       - 127.0.0.1:8014:8014
