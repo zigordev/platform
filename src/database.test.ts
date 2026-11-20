@@ -56,8 +56,8 @@ describe('provisionDatabases', () => {
     ]);
 
     expect(results).toEqual([
-      { app, database: databaseName(app), created: true },
-      { app: other, database: databaseName(other), created: true },
+      { app, database: databaseName(app), created: true, connections: 25 },
+      { app: other, database: databaseName(other), created: true, connections: 25 },
     ]);
     const [owner] = await query(
       adminUrl,
@@ -93,6 +93,38 @@ describe('provisionDatabases', () => {
     });
   });
 
+  it('limits each role to its connections and bounds its statements and idle transactions', async () => {
+    const app = uniqueApp();
+    const role = databaseName(app);
+    await provisionDatabases(adminUrl, [{ name: app, database: true, connections: 40 }]);
+    await query(adminUrl, `ALTER ROLE "${role}" PASSWORD 'local'`);
+    const url = new URL(serverUrl(role, role));
+    url.password = 'local';
+
+    const [limits] = await query(adminUrl, 'SELECT rolconnlimit FROM pg_roles WHERE rolname = $1', [
+      role,
+    ]);
+    const [settings] = await query(
+      url.toString(),
+      "SELECT current_setting('statement_timeout') AS statement, current_setting('idle_in_transaction_session_timeout') AS idle"
+    );
+
+    expect(limits).toEqual({ rolconnlimit: 40 });
+    expect(settings).toEqual({ statement: '1min', idle: '1min' });
+  });
+
+  it('moves a connection limit when the registry changes it', async () => {
+    const app = uniqueApp();
+    await provisionDatabases(adminUrl, [{ name: app, database: true }]);
+    await provisionDatabases(adminUrl, [{ name: app, database: true, connections: 10 }]);
+
+    expect(
+      await query(adminUrl, 'SELECT rolconnlimit FROM pg_roles WHERE rolname = $1', [
+        databaseName(app),
+      ])
+    ).toEqual([{ rolconnlimit: 10 }]);
+  });
+
   it('changes nothing on a second run and skips apps without a database', async () => {
     const app = uniqueApp();
     const stateless = uniqueApp();
@@ -103,7 +135,9 @@ describe('provisionDatabases', () => {
       { name: stateless, database: false },
     ]);
 
-    expect(results).toEqual([{ app, database: databaseName(app), created: false }]);
+    expect(results).toEqual([
+      { app, database: databaseName(app), created: false, connections: 25 },
+    ]);
     expect(
       await query(adminUrl, 'SELECT 1 FROM pg_roles WHERE rolname = $1', [databaseName(stateless)])
     ).toEqual([]);

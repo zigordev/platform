@@ -16,6 +16,7 @@ for (const result of results) {
     event: result.created ? 'platform.database_created' : 'platform.database_present',
     app: result.app,
     database: result.database,
+    connections: result.connections,
   });
 }
 const producers = await provisionProducers(config.PLATFORM_LOCAL_DIR);

@@ -11,13 +11,14 @@ name: gpool-api
 database: true
 ```
 
-| Field      | Meaning                                                                                                                                       |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`     | The app's one name, `<repo>-<app>` in kebab-case, equal to its folder                                                                         |
-| `database` | `true` gives the app its own database and role. It defaults to `false`                                                                        |
-| `local`    | `true` for an app that runs only on laptops, such as the playground. Production provisioning and deploys leave it out. It defaults to `false` |
+| Field         | Meaning                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | The app's one name, `<repo>-<app>` in kebab-case, equal to its folder                                                                         |
+| `database`    | `true` gives the app its own database and role. It defaults to `false`                                                                        |
+| `connections` | The most connections the app's role may open, 1 to 100. It defaults to 25                                                                     |
+| `local`       | `true` for an app that runs only on laptops, such as the playground. Production provisioning and deploys leave it out. It defaults to `false` |
 
-Unknown fields are rejected. `pnpm local:up` reads the registry and creates what is missing, without touching what exists ([ADR 0002](adr/0002-app-registry-provisions-databases.md)). The database and the role take the app's name with underscores, such as `gpool_api`. The role owns its database, and no other role can connect to it.
+Unknown fields are rejected. `pnpm local:up` reads the registry and creates what is missing, without touching what exists ([ADR 0002](adr/0002-app-registry-provisions-databases.md)). The database and the role take the app's name with underscores, such as `gpool_api`. The role owns its database, and no other role can connect to it. Each role is also limited to its `connections`, and its statements and idle transactions end after 60 seconds, so no app can starve the others ([ADR 0012](adr/0012-database-roles-have-guardrails.md)). A migration that needs longer statements sets `statement_timeout` for its own session.
 
 ## Point the app at the platform
 
