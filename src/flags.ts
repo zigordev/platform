@@ -1,11 +1,10 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as z from 'zod';
 import type { App } from './registry.ts';
 
 export const flagsSchemaUrl = 'https://flagd.dev/schema/v0/flags.json';
 export const flagsFileName = 'flags.json';
-export const flagdEnvFile = '.env';
 
 const flagKey = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
@@ -120,17 +119,15 @@ export function flagdSources(appFlags: readonly AppFlags[]): string {
   );
 }
 
-export function flagdEnv(appFlags: readonly AppFlags[]): string {
-  return `FLAGD_SOURCES='${flagdSources(appFlags)}'\n`;
-}
-
 export async function provisionFlags(
   appsDir: string,
-  localDir: string,
   apps: readonly Pick<App, 'name'>[],
   on: string = today()
-): Promise<{ apps: string[]; expired: ExpiredFlag[] }> {
+): Promise<{ apps: string[]; expired: ExpiredFlag[]; sources: string }> {
   const appFlags = await readFlags(appsDir, apps);
-  await writeFile(join(localDir, flagdEnvFile), flagdEnv(appFlags));
-  return { apps: appFlags.map(({ app }) => app), expired: expiredFlags(appFlags, on) };
+  return {
+    apps: appFlags.map(({ app }) => app),
+    expired: expiredFlags(appFlags, on),
+    sources: flagdSources(appFlags),
+  };
 }

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -176,6 +176,11 @@ describe('the provision-local script', () => {
         'notifications-api.env',
         'notifications-producers.json',
       ]);
+      expect(await readFile(join(localDir, '.env'), 'utf8')).toMatch(
+        new RegExp(
+          `^FLAGD_SOURCES='\\[\\{"uri":"/apps/${app}/flags\\.json","provider":"file"\\}\\]'\nALLOY_CONFIG_SHA='[0-9a-f]{64}'\n$`
+        )
+      );
     } finally {
       await rm(appsDir, { recursive: true, force: true });
       await rm(localDir, { recursive: true, force: true });

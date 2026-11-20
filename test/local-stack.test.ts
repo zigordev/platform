@@ -14,6 +14,7 @@ const mailpit = 'http://127.0.0.1:8025';
 const notifications = 'http://127.0.0.1:3001';
 const flagd = 'http://127.0.0.1:8016/ofrep/v1/evaluate/flags';
 const flagdManagement = 'http://127.0.0.1:8014';
+const faro = 'http://127.0.0.1:12347/collect';
 
 async function eventually<T>(probe: () => Promise<T | undefined>, timeoutMs = 60_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -307,6 +308,87 @@ describe('the local platform', () => {
     }, 120_000);
 
     expect(series.length).toBeGreaterThan(0);
+  });
+
+  it("carries browser telemetry through Alloy's Faro receiver into Loki and Tempo", async () => {
+    const id = randomUUID();
+    const traceId = randomBytes(16).toString('hex');
+    const now = BigInt(Date.now()) * 1_000_000n;
+    const origin = 'http://localhost:3000';
+    const preflight = await fetch(faro, {
+      method: 'OPTIONS',
+      headers: {
+        origin,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    const sent = await fetch(faro, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify({
+        meta: {
+          app: { name: 'platform-local-check', version: '0.0.0', environment: 'local' },
+          session: { id: `local-check-${id}` },
+        },
+        logs: [
+          {
+            message: `faro check ${id}`,
+            level: 'info',
+            timestamp: new Date().toISOString(),
+            context: {},
+          },
+        ],
+        traces: {
+          resourceSpans: [
+            {
+              resource: {
+                attributes: [
+                  { key: 'service.name', value: { stringValue: 'platform-local-check' } },
+                ],
+              },
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId,
+                      spanId: randomBytes(8).toString('hex'),
+                      name: 'faro check',
+                      kind: 1,
+                      startTimeUnixNano: String(now),
+                      endTimeUnixNano: String(now + 1_000_000n),
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+
+    const line = await eventually(async () => {
+      const logql = encodeURIComponent(
+        `{service_name="platform-local-check", source="faro"} |= "${id}"`
+      );
+      const result = await getJson(
+        `${grafana}/loki/loki/api/v1/query_range?query=${logql}&since=10m&limit=1`
+      );
+      const streams =
+        (result?.data as { result?: { values: [string, string][] }[] } | undefined)?.result ?? [];
+      return streams[0]?.values[0]?.[1];
+    });
+    const trace = await eventually(() => getJson(`${grafana}/tempo/api/traces/${traceId}`));
+
+    expect(preflight.status).toBe(204);
+    expect(['*', origin]).toContain(preflight.headers.get('access-control-allow-origin'));
+    expect(sent.status).toBe(202);
+    expect(JSON.parse(line)).toMatchObject({
+      app_name: 'platform-local-check',
+      kind: 'log',
+      message: `faro check ${id}`,
+    });
+    expect(JSON.stringify(trace)).toContain('faro check');
   });
 
   it('ships the logs of containers on the zigordev network to Loki', async () => {

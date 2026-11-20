@@ -5,6 +5,7 @@ const configSchema = z.object({
   PLATFORM_DATABASE_URL: z.url().default('postgresql://postgres@127.0.0.1:5432/postgres'),
   PLATFORM_APPS_DIR: z.string().min(1).default('apps'),
   PLATFORM_LOCAL_DIR: z.string().min(1).default('local'),
+  PLATFORM_ALLOY_CONFIG: z.string().min(1).default('stack/alloy/config.alloy'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

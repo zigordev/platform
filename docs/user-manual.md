@@ -97,6 +97,22 @@ The app reads its flags through OpenFeature, always with the selector `flagSetId
 
 A flag of another app answers `FLAG_NOT_FOUND`, and when flagd is down the provider returns each flag's default.
 
+## Send browser telemetry
+
+A web app sends real user monitoring from the browser with Grafana Faro, to Alloy's Faro receiver ([ADR 0009](adr/0009-alloy-receives-browser-telemetry.md), toolkit ADR 0016):
+
+| Setting         | Local value                                  |
+| --------------- | -------------------------------------------- |
+| Faro URL        | `http://127.0.0.1:12347/collect`             |
+| App name        | The app's registry name, such as `gpool-web` |
+| App version     | The release, as in `OTEL_SERVICE_VERSION`    |
+| App environment | `local`                                      |
+
+- Browser logs land in Loki labelled `source="faro"` and `service_name=<app>`, beside the app's server logs, and browser traces land in Tempo.
+- Any origin may post locally. Production allows only the apps' own origins.
+- Alloy never downloads sourcemaps, and it limits each browser to 50 requests a second with bursts of 100.
+- Nothing personal leaves the browser: no emails, names or ids in log messages or attributes.
+
 ## Run the app in a container
 
 A container joins the `zigordev` network and reaches the services by name, the same names production uses:
@@ -104,7 +120,7 @@ A container joins the `zigordev` network and reaches the services by name, the s
 | Service           | Address on the `zigordev` network                                    |
 | ----------------- | -------------------------------------------------------------------- |
 | PostgreSQL        | `postgres:5432`                                                      |
-| Alloy             | `http://alloy:4318`                                                  |
+| Alloy             | `http://alloy:4318`, Faro on `http://alloy:12347/collect`            |
 | Mailpit           | `mailpit:1025`                                                       |
 | notifications-api | `http://notifications-api:3000`                                      |
 | flagd             | `flagd:8015` for in-process providers, `http://flagd:8016` for OFREP |
