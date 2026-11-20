@@ -64,6 +64,23 @@ async function localDevKey(): Promise<string> {
   return localDev.key;
 }
 
+async function sendThroughNotifications(subject: string): Promise<Response> {
+  return fetch(`${notifications}/api/v1/emails`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${await localDevKey()}`,
+      'idempotency-key': `platform-local-check:${randomUUID()}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: { email: defaultProducer.senders[0], name: 'platform local check' },
+      to: { email: 'inbox@platform.test' },
+      subject,
+      text: 'From the local stack check, through notifications-api.',
+    }),
+  });
+}
+
 function sendMail(subject: string): Promise<void> {
   const commands: [string | undefined, string][] = [
     [undefined, '220'],
@@ -145,20 +162,7 @@ describe('the local platform', () => {
 
   it('delivers an email sent through notifications-api into Mailpit', async () => {
     const subject = `Notifications check ${randomUUID()}`;
-    const response = await fetch(`${notifications}/api/v1/emails`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${await localDevKey()}`,
-        'idempotency-key': `platform-local-check:${randomUUID()}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: { email: defaultProducer.senders[0], name: 'platform local check' },
-        to: { email: 'inbox@platform.test' },
-        subject,
-        text: 'From the local stack check, through notifications-api.',
-      }),
-    });
+    const response = await sendThroughNotifications(subject);
 
     expect(response.status).toBe(202);
     expect(Number((await findMail(subject)).messages_count)).toBe(1);
@@ -247,11 +251,34 @@ describe('the local platform', () => {
       'platform-postgres',
     ];
     const containers = await eventually(async () => {
-      const result = await getJson(`${grafana}/loki/loki/api/v1/label/container/values`);
+      const result = await getJson(`${grafana}/loki/loki/api/v1/label/container/values?since=720h`);
       const values = (result?.data as string[] | undefined) ?? [];
       return expected.every((name) => values.includes(name)) ? values : undefined;
     }, 120_000);
 
     expect(containers).toEqual(expect.arrayContaining(expected));
+  });
+
+  it('ships the lines notifications-api writes now to Loki', async () => {
+    const response = await sendThroughNotifications(`Log check ${randomUUID()}`);
+    const { id } = (await response.json()) as { id: string };
+
+    const line = await eventually(async () => {
+      const logql = encodeURIComponent(
+        `{container="platform-notifications-api"} |= "email.accepted" |= "${id}"`
+      );
+      const result = await getJson(
+        `${grafana}/loki/loki/api/v1/query_range?query=${logql}&since=10m&limit=1`
+      );
+      const streams =
+        (result?.data as { result?: { values: [string, string][] }[] } | undefined)?.result ?? [];
+      return streams[0]?.values[0]?.[1];
+    }, 120_000);
+
+    expect(JSON.parse(line)).toMatchObject({
+      event: 'email.accepted',
+      emailId: id,
+      service: 'notifications-api',
+    });
   });
 });

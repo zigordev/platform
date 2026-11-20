@@ -104,7 +104,7 @@ pnpm local:up
 pnpm local:check
 ```
 
-`pnpm run check` runs lint, typecheck and the tests with coverage. Its tests start their own PostgreSQL containers through Testcontainers. `pnpm local:check` probes the running platform: PostgreSQL and the provisioned roles, mail through Mailpit, notifications-api's health and an email through it into Mailpit, and a trace, a metric and container logs through Alloy into Grafana. CI also lints the workflows with zizmor, reviews new dependencies, and scans for secrets with gitleaks.
+`pnpm run check` runs lint, typecheck and the tests with coverage. Its tests start their own PostgreSQL containers through Testcontainers. `pnpm local:check` probes the running platform: PostgreSQL and the provisioned roles, mail through Mailpit, notifications-api's health and an email through it into Mailpit, and a trace, a metric and container logs through Alloy into Grafana, down to a line notifications-api has just written. It reads Loki's whole 30-day window for the container list, so a stack that has run for days still passes. CI also lints the workflows with zizmor, reviews new dependencies, and scans for secrets with gitleaks.
 
 ## When something fails
 
