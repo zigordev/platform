@@ -148,19 +148,18 @@ function sendMail(subject: string): Promise<void> {
 }
 
 describe('the local platform', () => {
-  it('runs PostgreSQL 18 with a database and role for every registered app', async () => {
+  it('runs PostgreSQL 18 with a guarded database and role for every registered app', async () => {
     const [server] = await query(
       'postgresql://postgres@127.0.0.1:5432/postgres',
       'SHOW server_version'
     );
-    const names = (await readApps('apps'))
-      .filter((app) => app.database)
-      .map((app) => databaseName(app.name));
+    const databaseApps = (await readApps('apps')).filter((app) => app.database);
+    const names = databaseApps.map((app) => databaseName(app.name));
     const found = await Promise.all(
       names.map(async (name) => {
         const [row] = await query(
           `postgresql://${name}@127.0.0.1:5432/${name}`,
-          'SELECT current_user AS role, current_database() AS database'
+          "SELECT current_user AS role, current_database() AS database, current_setting('statement_timeout') AS statement, current_setting('idle_in_transaction_session_timeout') AS idle, (SELECT rolconnlimit FROM pg_roles WHERE rolname = current_user) AS connections"
         );
         return row;
       })
@@ -168,7 +167,15 @@ describe('the local platform', () => {
 
     expect(String(server?.server_version)).toMatch(/^18\./);
     expect(names).toEqual(expect.arrayContaining(['platform_hello', 'playground_api']));
-    expect(found).toEqual(names.map((name) => ({ role: name, database: name })));
+    expect(found).toEqual(
+      databaseApps.map((app) => ({
+        role: databaseName(app.name),
+        database: databaseName(app.name),
+        statement: '1min',
+        idle: '1min',
+        connections: app.connections,
+      }))
+    );
   });
 
   it('catches mail sent over SMTP in Mailpit', async () => {

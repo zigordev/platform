@@ -6,6 +6,7 @@ import * as z from 'zod';
 export const appSchema = z.strictObject({
   name: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/, 'must be <repo>-<app> in kebab-case'),
   database: z.boolean().default(false),
+  connections: z.int().min(1).max(100).default(25),
   local: z.boolean().default(false),
 });
 

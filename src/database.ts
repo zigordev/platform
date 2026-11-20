@@ -5,7 +5,14 @@ export interface ProvisionResult {
   readonly app: string;
   readonly database: string;
   readonly created: boolean;
+  readonly connections: number;
 }
+
+export const defaultConnections = 25;
+export const statementTimeout = '60s';
+export const idleInTransactionTimeout = '60s';
+
+type DatabaseApp = Pick<App, 'name' | 'database'> & { readonly connections?: number };
 
 export function databaseName(appName: string): string {
   return appName.replaceAll('-', '_');
@@ -17,7 +24,7 @@ function identifier(name: string): string {
 
 export async function provisionDatabases(
   adminUrl: string,
-  apps: readonly Pick<App, 'name' | 'database'>[]
+  apps: readonly DatabaseApp[]
 ): Promise<ProvisionResult[]> {
   const client = new pg.Client({ connectionString: adminUrl });
   await client.connect();
@@ -35,7 +42,15 @@ export async function provisionDatabases(
         await client.query(`CREATE DATABASE ${identifier(name)} OWNER ${identifier(name)}`);
       }
       await client.query(`REVOKE ALL ON DATABASE ${identifier(name)} FROM PUBLIC`);
-      results.push({ app: app.name, database: name, created });
+      const connections = app.connections ?? defaultConnections;
+      await client.query(`ALTER ROLE ${identifier(name)} CONNECTION LIMIT ${connections}`);
+      await client.query(
+        `ALTER ROLE ${identifier(name)} SET statement_timeout = '${statementTimeout}'`
+      );
+      await client.query(
+        `ALTER ROLE ${identifier(name)} SET idle_in_transaction_session_timeout = '${idleInTransactionTimeout}'`
+      );
+      results.push({ app: app.name, database: name, created, connections });
     }
     return results;
   } finally {

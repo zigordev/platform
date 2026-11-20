@@ -15,5 +15,6 @@ This repo's decisions. The estate-wide decisions, including the platform's stack
 | [0009](0009-alloy-receives-browser-telemetry.md)      | Alloy receives browser telemetry                                                        | accepted                  |
 | [0010](0010-dashboards-are-code-from-the-registry.md) | Dashboards are code, generated from the registry                                        | accepted                  |
 | [0011](0011-alert-rules-are-code-with-runbooks.md)    | Alert rules are code, with runbooks                                                     | accepted                  |
+| [0012](0012-database-roles-have-guardrails.md)        | Database roles have guardrails                                                          | accepted                  |
 
 A new decision is a new record from [the template](template.md) with the next number, added here in the same PR. Accepted records are never edited.

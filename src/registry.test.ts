@@ -27,8 +27,16 @@ describe('readApps', () => {
     await addApp('cv-web', 'name: cv-web\n');
 
     expect(await readApps(appsDir)).toEqual([
-      { name: 'cv-web', database: false, local: false },
-      { name: 'gpool-api', database: true, local: false },
+      { name: 'cv-web', database: false, connections: 25, local: false },
+      { name: 'gpool-api', database: true, connections: 25, local: false },
+    ]);
+  });
+
+  it('reads the connection limit an app asks for', async () => {
+    await addApp('gpool-api', 'name: gpool-api\ndatabase: true\nconnections: 40\n');
+
+    expect(await readApps(appsDir)).toEqual([
+      { name: 'gpool-api', database: true, connections: 40, local: false },
     ]);
   });
 
@@ -36,7 +44,7 @@ describe('readApps', () => {
     await addApp('playground-api', 'name: playground-api\ndatabase: true\nlocal: true\n');
 
     expect(await readApps(appsDir)).toEqual([
-      { name: 'playground-api', database: true, local: true },
+      { name: 'playground-api', database: true, connections: 25, local: true },
     ]);
   });
 
@@ -69,6 +77,8 @@ describe('readApps', () => {
       'name: cv-web\nlocal: yes please\n',
       /is invalid/,
     ],
+    ['a connection limit of zero', 'cv-web', 'name: cv-web\nconnections: 0\n', /is invalid/],
+    ['a connection limit above 100', 'cv-web', 'name: cv-web\nconnections: 101\n', /is invalid/],
   ])('rejects %s', async (_case, folder, yaml, message) => {
     await addApp(folder, yaml);
 
@@ -79,8 +89,8 @@ describe('readApps', () => {
 
 describe('appsFor', () => {
   const apps = [
-    { name: 'cv-web', database: false, local: false },
-    { name: 'playground-api', database: true, local: true },
+    { name: 'cv-web', database: false, connections: 25, local: false },
+    { name: 'playground-api', database: true, connections: 25, local: true },
   ];
 
   it('gives the laptop every app, local-only ones included', () => {
@@ -89,7 +99,7 @@ describe('appsFor', () => {
 
   it('leaves local-only apps out of production', () => {
     expect(appsFor('production', apps)).toEqual([
-      { name: 'cv-web', database: false, local: false },
+      { name: 'cv-web', database: false, connections: 25, local: false },
     ]);
   });
 });
