@@ -97,6 +97,32 @@ The app reads its flags through OpenFeature, always with the selector `flagSetId
 
 A flag of another app answers `FLAG_NOT_FOUND`, and when flagd is down the provider returns each flag's default.
 
+## See the app in Grafana
+
+Every app in the registry gets a dashboard in Grafana's `zigordev` folder, named after the app ([ADR 0010](adr/0010-dashboards-are-code-from-the-registry.md)). Its rows show the overview, traffic by route and status, latency, and log lines by level, from the app's `http.server.request.duration` metric with `job="<app>"` and its logs with `service_name="<app>"`. An app named `*-web` also gets a browser row from Faro. The `platform` dashboard shows every app, flagd's evaluations and the browsers.
+
+An app adds rows of its own in `apps/<app>/observability.ts`, built with the helpers in `src/observability/panels.ts`:
+
+```ts
+import type { AppObservability } from '../../src/observability/dashboards.ts';
+import { metricSeries } from '../../src/observability/panels.ts';
+
+export const observability: AppObservability = {
+  rows: [
+    {
+      title: 'Pools',
+      panels: [
+        metricSeries('Pools created', 'ops', [
+          { expr: 'sum(rate(gpool_pools_created_total{job="gpool-api"}[$__rate_interval]))' },
+        ]),
+      ],
+    },
+  ],
+};
+```
+
+`pnpm local:up` regenerates the dashboards, and Grafana shows a change within 10 seconds.
+
 ## Send browser telemetry
 
 A web app sends real user monitoring from the browser with Grafana Faro, to Alloy's Faro receiver ([ADR 0009](adr/0009-alloy-receives-browser-telemetry.md), toolkit ADR 0016):
@@ -131,6 +157,6 @@ Alloy also tails the logs of every container on the `zigordev` network into Loki
 
 - The local platform is for one laptop. PostgreSQL trusts local connections, so its port must never be published beyond `127.0.0.1`.
 - PostgreSQL's data survives `pnpm local:down` and goes with `pnpm local:reset`.
-- Telemetry lives inside the otel-lgtm container and goes whenever that container is recreated.
+- Telemetry lives in the `lgtm-data` volume, so it survives a recreated otel-lgtm container and goes with `pnpm local:reset`.
 - notifications-api runs the release Renovate pinned, not notifications' `main`. A migration that a working copy applied stays in its database, ahead of that release.
 - Traces from notifications-api carry no `service.version` locally, because its image does not carry its version.

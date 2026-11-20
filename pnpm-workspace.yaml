@@ -1,6 +1,7 @@
 catalog:
   "@biomejs/biome": 2.6.8
   "@commitlint/cli": 21.2.4
+  "@grafana/grafana-foundation-sdk": 0.0.22
   "@types/node": 26.6.6
   "@types/pg": 8.23.1
   "@vitest/coverage-v8": 5.1.0

@@ -24,6 +24,7 @@
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
+    "@grafana/grafana-foundation-sdk": "catalog:",
     "@zigordev/config": "catalog:",
     "@zigordev/otel": "catalog:",
     "js-yaml": "catalog:",

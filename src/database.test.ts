@@ -170,9 +170,14 @@ describe('the provision-local script', () => {
           flag: 'old-banner',
           removeBy: '2026-01-31',
         }),
+        expect.objectContaining({
+          event: 'platform.dashboards_written',
+          dashboards: ['platform', `app-${app}`],
+        }),
       ]);
       expect((await readdir(localDir)).sort()).toEqual([
         '.env',
+        'grafana',
         'notifications-api.env',
         'notifications-producers.json',
       ]);

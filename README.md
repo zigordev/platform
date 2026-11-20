@@ -10,10 +10,10 @@ Where every zigordev app runs, described in code: the shared services, the infra
 | `stack/alloy/config.alloy` | The Alloy pipeline, shared by the local platform and production: OTLP from apps, container logs and browser telemetry from Faro, with only environment variables telling them apart                                                                                                         |
 | `apps/<app>/`              | The app registry, one folder per app: `app.yaml`, and `flags.json` for an app with feature flags. Each app that asks for a database gets its own database and role, and flagd serves each app its own flags. Local-only apps, such as the playground, are marked and never reach production |
 | `infra/bootstrap/`         | OpenTofu that creates what every other stack needs first: the encrypted state bucket, its KMS key, and the roles CI plans and applies with                                                                                                                                                  |
-| `src/` and `scripts/`      | The registry reader, the database provisioning and the local producer keys for notifications, with their tests                                                                                                                                                                              |
+| `src/` and `scripts/`      | The registry reader, the database provisioning, the flags, the local producer keys for notifications and the dashboards as code, with their tests                                                                                                                                           |
 | `docs/`                    | How to run it, how apps use it, a tutorial and the decision records                                                                                                                                                                                                                         |
 
-Later in Phase 2, more of `infra/`, `host/` (cloud-init, systemd units, doco-cd) and `observability/` join it.
+Later in Phase 2, more of `infra/` and `host/` (cloud-init, systemd units, doco-cd) join it.
 
 ## Why it exists
 
@@ -21,7 +21,7 @@ The legacy estate ran 14 shared services on its production host and seven local 
 
 ## Technologies and tools
 
-Docker Compose, PostgreSQL 18, Mailpit, flagd for OpenFeature, Grafana Alloy, grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus, and notifications-api's released image. OpenTofu 1.13 with tflint and trivy, sops and age. Node.js 26, TypeScript 7 and pnpm 12, all pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
+Docker Compose, PostgreSQL 18, Mailpit, flagd for OpenFeature, Grafana Alloy, grafana/otel-lgtm with Grafana, Tempo, Loki and Prometheus, dashboards built with the Grafana Foundation SDK, and notifications-api's released image. OpenTofu 1.13 with tflint and trivy, sops and age. Node.js 26, TypeScript 7 and pnpm 12, all pinned with mise, with Zod, js-yaml and node-postgres. Vitest with real PostgreSQL databases through `@zigordev/test`, Biome, lefthook, commitlint, Renovate, and toolkit's shared workflows in CI.
 
 ## Dependencies
 

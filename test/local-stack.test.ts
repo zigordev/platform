@@ -391,6 +391,20 @@ describe('the local platform', () => {
     expect(JSON.stringify(trace)).toContain('faro check');
   });
 
+  it('serves a dashboard for every registered app, and one for the platform', async () => {
+    const expected = ['platform', ...(await readApps('apps')).map((app) => `app-${app.name}`)];
+
+    const found = await eventually(async () => {
+      const response = await fetch('http://127.0.0.1:3300/api/search?tag=zigordev&type=dash-db');
+      const uids = response.ok
+        ? ((await response.json()) as { uid: string }[]).map((board) => board.uid)
+        : [];
+      return expected.every((uid) => uids.includes(uid)) ? uids : undefined;
+    });
+
+    expect(found).toEqual(expect.arrayContaining(expected));
+  });
+
   it('ships the logs of containers on the zigordev network to Loki', async () => {
     const expected = [
       'platform-alloy',
