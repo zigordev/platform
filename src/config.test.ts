@@ -8,6 +8,7 @@ describe('readConfig', () => {
       PLATFORM_APPS_DIR: 'apps',
       PLATFORM_LOCAL_DIR: 'local',
       PLATFORM_ALLOY_CONFIG: 'stack/alloy/config.alloy',
+      PLATFORM_GRAFANA_URL: 'http://127.0.0.1:3300',
       LOG_LEVEL: 'info',
     });
   });
@@ -19,6 +20,7 @@ describe('readConfig', () => {
         PLATFORM_APPS_DIR: '/srv/platform/apps',
         PLATFORM_LOCAL_DIR: '/srv/platform/local',
         PLATFORM_ALLOY_CONFIG: '/srv/platform/stack/alloy/config.alloy',
+        PLATFORM_GRAFANA_URL: 'https://grafana.example.test',
         LOG_LEVEL: 'debug',
       })
     ).toEqual({
@@ -26,6 +28,7 @@ describe('readConfig', () => {
       PLATFORM_APPS_DIR: '/srv/platform/apps',
       PLATFORM_LOCAL_DIR: '/srv/platform/local',
       PLATFORM_ALLOY_CONFIG: '/srv/platform/stack/alloy/config.alloy',
+      PLATFORM_GRAFANA_URL: 'https://grafana.example.test',
       LOG_LEVEL: 'debug',
     });
   });

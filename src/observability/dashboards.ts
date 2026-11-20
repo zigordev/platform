@@ -1,4 +1,5 @@
 import * as dashboard from '@grafana/grafana-foundation-sdk/dashboard';
+import type { AlertSpec } from './alerts.ts';
 import { logLines, logSeries, metricSeries, metricStat, type Panel } from './panels.ts';
 
 export interface DashboardRow {
@@ -8,6 +9,7 @@ export interface DashboardRow {
 
 export interface AppObservability {
   readonly rows?: readonly DashboardRow[];
+  readonly alerts?: readonly AlertSpec[];
 }
 
 export const dashboardTag = 'zigordev';

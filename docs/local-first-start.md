@@ -63,7 +63,7 @@ It starts PostgreSQL and gives every app in `apps/` that asks for a database its
 | Service           | Container                    | On the laptop                                                                                                           | What it does                                                                             |
 | ----------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | PostgreSQL        | `platform-postgres`          | `127.0.0.1:5432`                                                                                                        | PostgreSQL 18, one database and role per app                                             |
-| Mailpit           | `platform-mailpit`           | SMTP on `127.0.0.1:1025`, web on `http://127.0.0.1:8025`                                                                | Catches every email, so nothing leaves the laptop                                        |
+| Mailpit           | `platform-mailpit`           | SMTP on `127.0.0.1:1025`, web on `http://127.0.0.1:8025`                                                                | Catches every email, alert emails from Grafana included, so nothing leaves the laptop    |
 | Alloy             | `platform-alloy`             | OTLP on `127.0.0.1:4317` (gRPC) and `127.0.0.1:4318` (HTTP), Faro on `http://127.0.0.1:12347/collect`                   | Receives traces, metrics and logs, browser telemetry from Faro, and tails container logs |
 | otel-lgtm         | `platform-lgtm`              | Grafana on `http://127.0.0.1:3300`                                                                                      | Grafana with Tempo, Loki and Prometheus behind it                                        |
 | notifications-api | `platform-notifications-api` | `http://127.0.0.1:3001`                                                                                                 | The released notifications-api, which apps send email through. It delivers to Mailpit    |
@@ -71,7 +71,7 @@ It starts PostgreSQL and gives every app in `apps/` that asks for a database its
 
 - Every port listens on `127.0.0.1` only.
 - PostgreSQL trusts local connections, so there are no passwords to keep in git. Never publish its port beyond the laptop.
-- Grafana opens without a login, as an administrator, because nothing in it leaves the laptop. The `zigordev` folder holds a dashboard for every registered app and one for the platform.
+- Grafana opens without a login, as an administrator, because nothing in it leaves the laptop. The `zigordev` folder holds a dashboard for every registered app and one for the platform, and Alerting lists the rules. A firing alert is emailed to `alerts@platform.test` in Mailpit.
 - Port 3000 stays free for the first Next.js app.
 - `platform-notifications-api-migrate` applies notifications-api's migrations from the same image, then exits.
 - `pnpm local:up` recreates Alloy when `stack/alloy/config.alloy` changes, because it passes the file's hash to compose.

@@ -3,7 +3,7 @@ import { fileSha256, writeComposeEnv } from '../src/compose-env.ts';
 import { readConfig } from '../src/config.ts';
 import { provisionDatabases } from '../src/database.ts';
 import { provisionFlags } from '../src/flags.ts';
-import { provisionDashboards } from '../src/observability/provision.ts';
+import { provisionAlerting, provisionDashboards } from '../src/observability/provision.ts';
 import { provisionProducers } from '../src/producers.ts';
 import { appsFor, readApps } from '../src/registry.ts';
 
@@ -24,10 +24,6 @@ logger.info({
   producers: producers.names,
 });
 const flags = await provisionFlags(config.PLATFORM_APPS_DIR, apps);
-await writeComposeEnv(config.PLATFORM_LOCAL_DIR, {
-  FLAGD_SOURCES: flags.sources,
-  ALLOY_CONFIG_SHA: await fileSha256(config.PLATFORM_ALLOY_CONFIG),
-});
 logger.info({ event: 'platform.flags_served', apps: flags.apps });
 for (const expired of flags.expired) {
   logger.warn({
@@ -43,3 +39,15 @@ const dashboards = await provisionDashboards(
   apps
 );
 logger.info({ event: 'platform.dashboards_written', dashboards: dashboards.dashboards });
+const alerting = await provisionAlerting(
+  config.PLATFORM_APPS_DIR,
+  config.PLATFORM_LOCAL_DIR,
+  apps,
+  config.PLATFORM_GRAFANA_URL
+);
+logger.info({ event: 'platform.alerts_written', alerts: alerting.alerts });
+await writeComposeEnv(config.PLATFORM_LOCAL_DIR, {
+  FLAGD_SOURCES: flags.sources,
+  ALLOY_CONFIG_SHA: await fileSha256(config.PLATFORM_ALLOY_CONFIG),
+  GRAFANA_ALERTING_SHA: await fileSha256(alerting.file),
+});

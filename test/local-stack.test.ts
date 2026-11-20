@@ -5,6 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { readConfig } from '../src/config.ts';
 import { databaseName } from '../src/database.ts';
 import { readFlags } from '../src/flags.ts';
+import {
+  alertAddress,
+  appAlerts,
+  contactPoint,
+  platformAlerts,
+} from '../src/observability/alerts.ts';
+import { readAppObservability } from '../src/observability/provision.ts';
 import { defaultProducer, readProducers } from '../src/producers.ts';
 import { readApps } from '../src/registry.ts';
 
@@ -403,6 +410,75 @@ describe('the local platform', () => {
     });
 
     expect(found).toEqual(expect.arrayContaining(expected));
+  });
+
+  it('loads every alert rule and the contact point that emails Mailpit', async () => {
+    const apps = await readApps('apps');
+    const expected = [
+      ...platformAlerts.map((alert) => alert.name),
+      ...(
+        await Promise.all(
+          apps.map(async (app) => [
+            ...appAlerts(app.name),
+            ...((await readAppObservability('apps', app)).alerts ?? []),
+          ])
+        )
+      )
+        .flat()
+        .map((alert) => alert.name),
+    ];
+
+    const titles = await eventually(async () => {
+      const found = (await getJson(
+        'http://127.0.0.1:3300/api/v1/provisioning/alert-rules'
+      )) as unknown;
+      const names = Array.isArray(found) ? found.map((rule: { title: string }) => rule.title) : [];
+      return expected.every((name) => names.includes(name)) ? names : undefined;
+    });
+    const points = (await getJson(
+      'http://127.0.0.1:3300/api/v1/provisioning/contact-points'
+    )) as unknown as { name: string; settings: { addresses?: string } }[];
+
+    expect(titles).toEqual(expect.arrayContaining(expected));
+    expect(points).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: contactPoint,
+          settings: expect.objectContaining({ addresses: alertAddress }),
+        }),
+      ])
+    );
+  });
+
+  it('emails an alert notification into Mailpit', async () => {
+    const id = randomUUID();
+    const receivers =
+      'http://127.0.0.1:3300/apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers';
+    const uid = Buffer.from(contactPoint).toString('base64url');
+    const receiver = (await getJson(`${receivers}/${uid}`)) as {
+      spec: { integrations: unknown[] };
+    };
+
+    const sent = await fetch(`${receivers}/${uid}/test`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        integration: receiver.spec.integrations[0],
+        alert: {
+          labels: { alertname: 'PlatformLocalCheck' },
+          annotations: { summary: `local check ${id}` },
+        },
+      }),
+    });
+    const mail = await eventually(async () => {
+      const result = await getJson(`${mailpit}/api/v1/search?query=${encodeURIComponent(id)}`);
+      return Number(result?.messages_count) > 0 ? result : undefined;
+    });
+
+    expect(sent.status).toBe(200);
+    expect((mail.messages as { To: { Address: string }[] }[])[0]?.To[0]?.Address).toBe(
+      alertAddress
+    );
   });
 
   it('ships the logs of containers on the zigordev network to Loki', async () => {

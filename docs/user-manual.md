@@ -123,6 +123,31 @@ export const observability: AppObservability = {
 
 `pnpm local:up` regenerates the dashboards, and Grafana shows a change within 10 seconds.
 
+## Alerts
+
+Every app in the registry gets one standard alert, `<App>ErrorRatio`, such as `GpoolApiErrorRatio`. It fires when more than 5% of the app's requests have failed with a server error for 5 minutes ([ADR 0011](adr/0011-alert-rules-are-code-with-runbooks.md)). The platform adds `PlatformFlagdDown`. Locally, every alert is emailed to `alerts@platform.test`, and Mailpit catches it.
+
+An app adds its own alerts in `apps/<app>/observability.ts`, next to its dashboard rows:
+
+```ts
+alerts: [
+  {
+    name: 'GpoolApiInvitationsFailing',
+    summary: 'Invitations have failed to send for 10 minutes',
+    expr: 'sum(increase(gpool_invitations_failed_total{job="gpool-api"}[10m])) > 0',
+    for: '10m',
+    severity: 'ticket',
+    runbook: 'https://github.com/zigordev/gpool/blob/main/docs/runbooks/invitations-failing.md',
+    dashboard: 'app-gpool-api',
+  },
+],
+```
+
+- `expr` returns a value only while the alert should fire. With no data, the alert stays quiet.
+- `severity` is `page` for something a person should look at now, and `ticket` for something that can wait.
+- Every alert links a runbook in the app's repo, with what fired, whether it matters, how to see it and what to do. It also links the app's dashboard.
+- Run a new `expr` against the local Prometheus before it goes in. `pnpm local:up` loads it, and `pnpm local:check` confirms Grafana has it.
+
 ## Send browser telemetry
 
 A web app sends real user monitoring from the browser with Grafana Faro, to Alloy's Faro receiver ([ADR 0009](adr/0009-alloy-receives-browser-telemetry.md), toolkit ADR 0016):
