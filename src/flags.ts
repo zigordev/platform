@@ -75,7 +75,10 @@ async function readOptional(file: string): Promise<string | undefined> {
   }
 }
 
-export async function readFlags(appsDir: string, apps: readonly App[]): Promise<AppFlags[]> {
+export async function readFlags(
+  appsDir: string,
+  apps: readonly Pick<App, 'name'>[]
+): Promise<AppFlags[]> {
   const found: AppFlags[] = [];
   for (const app of apps) {
     const file = join(appsDir, app.name, flagsFileName);
@@ -124,7 +127,7 @@ export function flagdEnv(appFlags: readonly AppFlags[]): string {
 export async function provisionFlags(
   appsDir: string,
   localDir: string,
-  apps: readonly App[],
+  apps: readonly Pick<App, 'name'>[],
   on: string = today()
 ): Promise<{ apps: string[]; expired: ExpiredFlag[] }> {
   const appFlags = await readFlags(appsDir, apps);

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { RegistryError, readApps } from './registry.ts';
+import { appsFor, RegistryError, readApps } from './registry.ts';
 
 let appsDir: string;
 
@@ -27,8 +27,16 @@ describe('readApps', () => {
     await addApp('cv-web', 'name: cv-web\n');
 
     expect(await readApps(appsDir)).toEqual([
-      { name: 'cv-web', database: false },
-      { name: 'gpool-api', database: true },
+      { name: 'cv-web', database: false, local: false },
+      { name: 'gpool-api', database: true, local: false },
+    ]);
+  });
+
+  it('reads an app that runs only on laptops', async () => {
+    await addApp('playground-api', 'name: playground-api\ndatabase: true\nlocal: true\n');
+
+    expect(await readApps(appsDir)).toEqual([
+      { name: 'playground-api', database: true, local: true },
     ]);
   });
 
@@ -55,10 +63,33 @@ describe('readApps', () => {
       /names cv-api, but its folder is cv-web/,
     ],
     ['a folder without app.yaml', 'cv-web', undefined, /app\.yaml is missing/],
+    [
+      'a local flag that is not a boolean',
+      'cv-web',
+      'name: cv-web\nlocal: yes please\n',
+      /is invalid/,
+    ],
   ])('rejects %s', async (_case, folder, yaml, message) => {
     await addApp(folder, yaml);
 
     await expect(readApps(appsDir)).rejects.toThrow(RegistryError);
     await expect(readApps(appsDir)).rejects.toThrow(message);
+  });
+});
+
+describe('appsFor', () => {
+  const apps = [
+    { name: 'cv-web', database: false, local: false },
+    { name: 'playground-api', database: true, local: true },
+  ];
+
+  it('gives the laptop every app, local-only ones included', () => {
+    expect(appsFor('local', apps)).toEqual(apps);
+  });
+
+  it('leaves local-only apps out of production', () => {
+    expect(appsFor('production', apps)).toEqual([
+      { name: 'cv-web', database: false, local: false },
+    ]);
   });
 });

@@ -11,10 +11,11 @@ name: gpool-api
 database: true
 ```
 
-| Field      | Meaning                                                                |
-| ---------- | ---------------------------------------------------------------------- |
-| `name`     | The app's one name, `<repo>-<app>` in kebab-case, equal to its folder  |
-| `database` | `true` gives the app its own database and role. It defaults to `false` |
+| Field      | Meaning                                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | The app's one name, `<repo>-<app>` in kebab-case, equal to its folder                                                                         |
+| `database` | `true` gives the app its own database and role. It defaults to `false`                                                                        |
+| `local`    | `true` for an app that runs only on laptops, such as the playground. Production provisioning and deploys leave it out. It defaults to `false` |
 
 Unknown fields are rejected. `pnpm local:up` reads the registry and creates what is missing, without touching what exists ([ADR 0002](adr/0002-app-registry-provisions-databases.md)). The database and the role take the app's name with underscores, such as `gpool_api`. The role owns its database, and no other role can connect to it.
 

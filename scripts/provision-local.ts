@@ -3,11 +3,11 @@ import { readConfig } from '../src/config.ts';
 import { provisionDatabases } from '../src/database.ts';
 import { provisionFlags } from '../src/flags.ts';
 import { provisionProducers } from '../src/producers.ts';
-import { readApps } from '../src/registry.ts';
+import { appsFor, readApps } from '../src/registry.ts';
 
 const config = readConfig();
 const logger = createLogger({ service: 'platform-provision', level: config.LOG_LEVEL });
-const apps = await readApps(config.PLATFORM_APPS_DIR);
+const apps = appsFor('local', await readApps(config.PLATFORM_APPS_DIR));
 const results = await provisionDatabases(config.PLATFORM_DATABASE_URL, apps);
 for (const result of results) {
   logger.info({

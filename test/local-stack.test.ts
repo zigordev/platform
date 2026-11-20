@@ -3,6 +3,7 @@ import { connect } from 'node:net';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
 import { readConfig } from '../src/config.ts';
+import { databaseName } from '../src/database.ts';
 import { readFlags } from '../src/flags.ts';
 import { defaultProducer, readProducers } from '../src/producers.ts';
 import { readApps } from '../src/registry.ts';
@@ -144,13 +145,22 @@ describe('the local platform', () => {
       'postgresql://postgres@127.0.0.1:5432/postgres',
       'SHOW server_version'
     );
-    const [hello] = await query(
-      'postgresql://platform_hello@127.0.0.1:5432/platform_hello',
-      'SELECT current_user AS role, current_database() AS database'
+    const names = (await readApps('apps'))
+      .filter((app) => app.database)
+      .map((app) => databaseName(app.name));
+    const found = await Promise.all(
+      names.map(async (name) => {
+        const [row] = await query(
+          `postgresql://${name}@127.0.0.1:5432/${name}`,
+          'SELECT current_user AS role, current_database() AS database'
+        );
+        return row;
+      })
     );
 
     expect(String(server?.server_version)).toMatch(/^18\./);
-    expect(hello).toEqual({ role: 'platform_hello', database: 'platform_hello' });
+    expect(names).toEqual(expect.arrayContaining(['platform_hello', 'playground_api']));
+    expect(found).toEqual(names.map((name) => ({ role: name, database: name })));
   });
 
   it('catches mail sent over SMTP in Mailpit', async () => {
