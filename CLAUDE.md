@@ -8,6 +8,7 @@ Where every zigordev app runs, described in code. The estate rules in toolkit's 
 - `local/notifications-producers.json` holds the local producer keys, and `local/notifications-api.env` their hashes for notifications-api. Both are git-ignored and written by the scripts.
 - `stack/alloy/config.alloy`: the Alloy pipeline for both the local platform and production. Only environment variables differ.
 - `apps/<app>/app.yaml`: the registry. An app's folder is named after the app. `apps/<app>/flags.json` holds the app's feature flags, which flagd serves to that app only ([ADR 0007](docs/adr/0007-flagd-serves-each-apps-flags.md)).
+- An `app.yaml` with `local: true` marks an app that runs only on laptops, such as the playground. `appsFor('production', ...)` leaves it out ([ADR 0008](docs/adr/0008-local-only-apps-in-the-registry.md)).
 - `local/.env` holds the list of flags files that compose passes to flagd. It is git-ignored and written by `pnpm local:up`.
 - `src/` holds the registry reader, the database provisioning, the flags reader and the local producer keys, `scripts/` the commands that run them, and `test/` the test setup and the local stack check.
 - `infra/<stack>/`: OpenTofu stacks. `infra/bootstrap/` keeps the state bucket, the state key and the CI roles.

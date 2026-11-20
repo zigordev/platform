@@ -6,9 +6,12 @@ import * as z from 'zod';
 export const appSchema = z.strictObject({
   name: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/, 'must be <repo>-<app> in kebab-case'),
   database: z.boolean().default(false),
+  local: z.boolean().default(false),
 });
 
 export type App = z.output<typeof appSchema>;
+
+export type Environment = 'local' | 'production';
 
 export class RegistryError extends Error {
   override readonly name = 'RegistryError';
@@ -38,6 +41,13 @@ async function folders(appsDir: string): Promise<string[]> {
     }
     throw error;
   }
+}
+
+export function appsFor<T extends Pick<App, 'local'>>(
+  environment: Environment,
+  apps: readonly T[]
+): T[] {
+  return environment === 'local' ? [...apps] : apps.filter((app) => !app.local);
 }
 
 export async function readApps(appsDir: string): Promise<App[]> {

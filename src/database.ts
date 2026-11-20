@@ -17,7 +17,7 @@ function identifier(name: string): string {
 
 export async function provisionDatabases(
   adminUrl: string,
-  apps: readonly App[]
+  apps: readonly Pick<App, 'name' | 'database'>[]
 ): Promise<ProvisionResult[]> {
   const client = new pg.Client({ connectionString: adminUrl });
   await client.connect();
