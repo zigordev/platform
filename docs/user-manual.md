@@ -5,9 +5,9 @@
 | A user takes                         | Who       | From                 | Exists today                                                 |
 | ------------------------------------ | --------- | -------------------- | ------------------------------------------------------------ |
 | The shared services on the laptop    | A product | `stack/`             | Yes, in this repo. As the package `@zigordev/stack`, not yet |
-| A dashboard, and the standard alerts | A product | `observability/`     | Not yet. Phase 2                                             |
+| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop. Four of the ten alerts                   |
 | A place to run in production         | A product | `infra/` and `host/` | Not yet. Phase 3                                             |
-| A runbook for every alert            | The owner | `docs/runbooks/`     | Not yet. Phase 2                                             |
+| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those four                                          |
 
 ## What a product does not have to do
 
@@ -20,8 +20,8 @@ Everything else comes from here, with no line of setup in the product:
 | Its address                             | The ingress reads the route from the labels in the product's own compose file | Yes          |
 | Its logs, traces and metrics in Grafana | One agent collects them from every container the same way                     | Yes          |
 | A place that catches its email          | The mail catcher takes whatever is sent to it on the laptop                   | Yes          |
-| Its dashboard                           | The dashboard asks the data which apps exist                                  | Not yet      |
-| The standard alerts                     | Each rule covers every app at once                                            | Not yet      |
+| Its dashboard                           | The dashboard asks the data which apps exist                                  | Yes          |
+| The standard alerts                     | Each rule covers every app at once                                            | Four of ten  |
 | Its backups                             | The backup job finds a database by a label in the product's compose file      | Not yet      |
 
 ## Being served on the laptop
@@ -38,6 +38,22 @@ With the shared services running, an app is served when its compose file does fo
 Its log lines need nothing: the agent reads them from Docker and names them by the app's service name.
 
 [The package's own page](../stack/README.md) shows a whole example, explains each service, and lists what to check when an app is not served.
+
+## The dashboard and the alerts
+
+An app that sends its requests' numbers the standard way, which `@zigordev/otel` does for a TypeScript service, needs nothing more.
+
+| The app gets                           | Where                                                             | From when                                                           |
+| -------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| A place on the App dashboard           | Grafana, folder `zigordev`, dashboard App, in the list at the top | Its first request                                                   |
+| The alert "An app answers with errors" | Grafana, Alerting                                                 | More than 5% of its requests fail at the server for 5 minutes       |
+| The alert "An app is slow"             | Grafana, Alerting                                                 | Its slowest 5% of requests take longer than 1 second for 10 minutes |
+
+The Platform dashboard shows the machine, the ingress and who is reporting. Two more alerts watch the platform itself: the host filling up, and telemetry going silent.
+
+Each alert links [its runbook](runbooks/README.md), and opens the panel that shows the problem. On the laptop the rules run and notify nobody.
+
+An app adds panels and alerts for what only it knows, such as emails delivered per hour, in its own repo. That arrives with the first app that needs it.
 
 ## Starting and stopping the shared services
 

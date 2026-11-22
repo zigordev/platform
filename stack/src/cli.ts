@@ -1,12 +1,16 @@
+import { join } from 'node:path';
+
 export type Interact = (command: string, args: readonly string[], cwd: string) => number;
 
 export interface Io {
   readonly folder: string;
   readonly interact: Interact;
+  readonly has: (path: string) => boolean;
   readonly write: (text: string) => void;
 }
 
 export const files = ['compose.yaml', 'compose.local.yaml'] as const;
+export const resources = 'observability';
 
 export const addresses = [
   ['http://grafana.localhost', 'Grafana: the logs, traces and metrics of every app'],
@@ -21,7 +25,8 @@ const usage = [
   '       zigordev-stack reset',
   '',
   'up     Starts the shared services and waits until each one is healthy.',
-  '       When they are running already, it changes nothing.',
+  '       It then pushes the dashboards and the alert rules to the local Grafana.',
+  '       When the services are running already, it changes nothing.',
   'down   Stops them and keeps their data.',
   'reset  Stops them, deletes their data and starts them again.',
   '',
@@ -36,12 +41,25 @@ function compose(io: Io, ...args: readonly string[]): number {
 }
 
 function up(io: Io): number {
-  const code = compose(io, 'up', '--detach', '--wait', '--wait-timeout', '300');
-  if (code !== 0) {
+  if (!io.has(join(io.folder, resources, 'folder.json'))) {
+    io.write(
+      `zigordev-stack: the dashboard files are missing from ${join(io.folder, resources)}. In the platform repo, \`pnpm build\` writes them\n`
+    );
+    return 1;
+  }
+  const started = compose(io, 'up', '--detach', '--wait', '--wait-timeout', '300');
+  if (started !== 0) {
     io.write(
       'zigordev-stack: not every shared service became healthy. The lines above name the one that did not\n'
     );
-    return code;
+    return started;
+  }
+  const pushed = compose(io, 'run', '--rm', 'gcx');
+  if (pushed !== 0) {
+    io.write(
+      'zigordev-stack: the services are up, but the dashboards and the alert rules could not be pushed. The lines above say why\n'
+    );
+    return pushed;
   }
   const width = Math.max(...addresses.map(([address]) => address.length)) + 2;
   io.write(

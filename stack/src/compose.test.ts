@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { model, type Service } from '../test/model.ts';
 
-const everywhere = model('compose.yaml');
-const laptop = model('compose.yaml', 'compose.local.yaml');
+const everywhere = model(['compose.yaml']);
+const laptop = model(['compose.yaml', 'compose.local.yaml']);
+const withJobs = model(['compose.yaml', 'compose.local.yaml'], 'push');
 
 const services = Object.entries(laptop.services);
 const socket = '/var/run/docker.sock';
@@ -213,11 +214,80 @@ describe('the telemetry agent', () => {
     expect(config).toContain('refresh_interval = "5s"');
   });
 
+  it('reads the machine through three mounts that it cannot write to', () => {
+    const mounts = (laptop.services.alloy?.volumes ?? []).filter((mount) => mount.type === 'bind');
+    expect(mounts).toEqual([
+      expect.objectContaining({ source: '/proc', target: '/host/proc', read_only: true }),
+      expect.objectContaining({ source: '/sys', target: '/host/sys', read_only: true }),
+      expect.objectContaining({ source: '/', target: '/host/root', read_only: true }),
+    ]);
+    expect(everywhere.services.alloy?.volumes).toEqual(laptop.services.alloy?.volumes);
+  });
+
+  it('keeps only the machine series that a dashboard or an alert uses', () => {
+    expect(config).toContain(
+      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)"'
+    );
+    expect(config).toContain('action        = "keep"');
+  });
+
+  it('reports its own heartbeat as alloy, and the machine as host', () => {
+    expect(config).toContain('replacement   = "alloy"');
+    expect(config).toContain('replacement   = "host"');
+  });
+
   it('names each log line by the service that wrote it', () => {
     expect(config).toContain(
       'source_labels = ["__meta_docker_container_label_com_docker_compose_service"]'
     );
     expect(config).toContain('target_label  = "service_name"');
+  });
+});
+
+describe('the job that pushes the dashboards and the alert rules', () => {
+  const job = withJobs.services.gcx;
+
+  it('is not one of the services: it runs once, on request, and ends', () => {
+    expect(laptop.services.gcx).toBeUndefined();
+    expect(job?.profiles).toEqual(['push']);
+    expect(job?.healthcheck).toBeUndefined();
+  });
+
+  it('is boxed in like a service', () => {
+    expect(job?.image).toMatch(/^grafana\/gcx:v\d+\.\d+\.\d+$/);
+    expect(job?.user).toBe('65532:65532');
+    expect(job?.init).toBe(true);
+    expect(job?.read_only).toBe(true);
+    expect(job?.cap_drop).toEqual(['ALL']);
+    expect(job?.security_opt).toEqual(['no-new-privileges:true']);
+    expect(Number(job?.mem_limit)).toBeGreaterThan(0);
+    expect(job?.cpus).toBeGreaterThan(0);
+    expect(job?.ports).toBeUndefined();
+  });
+
+  it('reads the files beside the compose files, and cannot change them', () => {
+    expect(job?.volumes).toEqual([
+      expect.objectContaining({ type: 'bind', target: '/resources', read_only: true }),
+    ]);
+    expect(job?.volumes?.[0]?.source).toMatch(/\/observability$/);
+    expect(job?.command).toEqual([
+      'resources',
+      'push',
+      '--path',
+      '/resources',
+      '--on-error',
+      'abort',
+    ]);
+  });
+
+  it('pushes to the local Grafana, reports nothing to its maker, and keeps no sign-in', () => {
+    expect(job?.environment).toEqual(
+      expect.objectContaining({
+        GRAFANA_SERVER: 'http://lgtm:3000',
+        GCX_TELEMETRY: 'disabled',
+        GCX_KEYCHAIN: 'off',
+      })
+    );
   });
 });
 

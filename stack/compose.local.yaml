@@ -75,5 +75,33 @@ services:
       traefik.http.services.mail.loadbalancer.server.port: "8025"
     networks: [zigordev]
 
+  gcx:
+    image: grafana/gcx:v1.8.0
+    profiles: [push]
+    command: [resources, push, --path, /resources, --on-error, abort]
+    user: "65532:65532"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      GRAFANA_SERVER: http://lgtm:3000
+      GRAFANA_ORG_ID: "1"
+      GRAFANA_USER: admin
+      GRAFANA_PASSWORD: admin
+      GCX_TELEMETRY: disabled
+      GCX_KEYCHAIN: "off"
+    tmpfs:
+      - /home/nonroot/.config
+    volumes:
+      - ./observability:/resources:ro
+    depends_on:
+      lgtm:
+        condition: service_healthy
+    networks: [zigordev]
+
 volumes:
   lgtm-data:
