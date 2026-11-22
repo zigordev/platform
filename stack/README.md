@@ -71,7 +71,7 @@ An app joins the network and says three things about itself, in its own compose 
 
 The ingress routes only to a container that asked for it and whose health check passes. A container that is still starting, or that turned unhealthy, gets no request.
 
-The agent reads the log lines of every container on the two networks, through the proxy, and of no other container on the machine. It looks for new containers every 5 seconds, so a job that runs for a few seconds is not missed.
+The agent reads the log lines of every container on the two networks, through the proxy, and of no other container on the machine. When a line is JSON and carries a `traceId`, the agent stores that id beside the line. In Grafana the line then has a link named Trace, which opens the whole request, and a trace lists its own log lines. It looks for new containers every 5 seconds, so a job that runs for a few seconds is not missed.
 
 ### What the agent reports by itself
 
