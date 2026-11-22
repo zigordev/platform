@@ -52,13 +52,21 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 
 ## Looking after it
 
-| Situation                                          | What to do                                                                                                                                          |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `main` is red                                      | Fix it or revert the change before any other work. The run is under Actions, in the workflow named CI                                               |
-| A pull request's Quality job is red                | `pnpm check` on the branch shows the same failure                                                                                                   |
-| Its Title job is red                               | Rewrite the title as `type(scope): summary`, in lower case, with no final period                                                                    |
-| Its Dependencies job is red                        | The job's summary names the dependency and its flaw. Take a fixed version, or do without it                                                         |
-| Its Code scan job is red                           | The job's log lists each open finding with a link. Fix the code                                                                                     |
-| The pipeline does not start at all                 | The caller names a commit of `toolkit` that does not hold the pipeline. Put the commit of a released version back, with its version beside it       |
-| A pull request from Renovate is red, or stays open | [Dependency updates](https://github.com/zigordev/toolkit/blob/main/docs/handbook/dependency-updates.md), in the handbook, says what each case means |
-| A change has to be undone                          | Revert it through a pull request                                                                                                                    |
+| Situation                                          | What to do                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main` is red                                      | Fix it or revert the change before any other work. The run is under Actions, in the workflow named CI                                                                                                                                     |
+| A pull request's Quality job is red                | `pnpm check` on the branch shows the same failure                                                                                                                                                                                         |
+| Its Title job is red                               | Rewrite the title as `type(scope): summary`, in lower case, with no final period                                                                                                                                                          |
+| Its Dependencies job is red                        | The job's summary names the dependency and its flaw. Take a fixed version, or do without it. When another package brings the dependency in and offers no fixed version, name the fixed version under `overrides` in `pnpm-workspace.yaml` |
+| Its Code scan job is red                           | The job's log lists each open finding with a link. Fix the code                                                                                                                                                                           |
+| The pipeline does not start at all                 | The caller names a commit of `toolkit` that does not hold the pipeline. Put the commit of a released version back, with its version beside it                                                                                             |
+| A pull request from Renovate is red, or stays open | [Dependency updates](https://github.com/zigordev/toolkit/blob/main/docs/handbook/dependency-updates.md), in the handbook, says what each case means                                                                                       |
+| A change has to be undone                          | Revert it through a pull request                                                                                                                                                                                                          |
+
+## The one override
+
+`pnpm-workspace.yaml` holds one entry under `overrides`: `katex` 0.19.1.
+
+We do not use `katex`. The Markdown linter brings it in through its extension for maths, which asks for version 0.16. Every version below 0.18.2 has a known flaw of low severity, the advisory GHSA-238p-pmpm-9mq7 of 2026-10-05, and on 2026-11-22 no release of the linter takes a fixed version. The pipeline fails a pull request that adds a dependency with a known flaw, so the first pull request of this repo could not pass.
+
+The override makes pnpm install the fixed version in its place. That is safe here because the linter reads the maths in a file and never renders it, so the code of `katex` does not run. The entry goes when the linter takes a fixed version itself.

@@ -30,6 +30,7 @@ Four folders arrive with their steps of the build plan: `stack/` and `observabil
 - Every change to AWS, Cloudflare, GitHub's settings or Grafana Cloud waits for the owner. Nothing there is changed by hand, and a session never runs an apply without a yes.
 - A shared file is never edited here: `.claude/`, `lefthook.yml`, `.commitlintrc.json`, `.markdownlint-cli2.jsonc`, `renovate.json` and the pull request template. Change it in `toolkit`, then run `pnpm exec zigordev sync` here, or `pnpm check` fails.
 - A version lives once, in the `catalog` of `pnpm-workspace.yaml`, as an exact version. `package.json` refers to it with `catalog:`.
+- An entry under `overrides` in `pnpm-workspace.yaml` replaces a dependency of a dependency that has a known flaw, when the package that brings it in offers no fixed version. The entry goes when that package takes a fixed version itself.
 - The pipeline is called at a commit of `toolkit` that a version tag names, with that version beside it. Renovate proposes the next one.
 - The job named `check` is the required check in every repo. It is never renamed.
 - Coverage counts the `src` folder of every top-level folder, with a floor of 90%.
