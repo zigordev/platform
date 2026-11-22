@@ -236,6 +236,13 @@ describe('the telemetry agent', () => {
     expect(config).toContain('replacement   = "host"');
   });
 
+  it('lifts the trace id out of a log line, so that the line links to its trace and the trace to its lines', () => {
+    expect(config).toContain('forward_to = [loki.process.containers.receiver]');
+    expect(config).toContain('expressions = { trace_id = "traceId" }');
+    expect(config).toContain('stage.structured_metadata {');
+    expect(config).toContain('values = { trace_id = "" }');
+  });
+
   it('names each log line by the service that wrote it', () => {
     expect(config).toContain(
       'source_labels = ["__meta_docker_container_label_com_docker_compose_service"]'

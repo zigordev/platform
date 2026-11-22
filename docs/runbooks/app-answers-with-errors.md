@@ -11,7 +11,7 @@ Visitors of that app see an error page, or a part of a page that does not load.
 1. Open the alert's panel. It is on the App dashboard, with the app already picked: "Share of requests that fail".
 2. On the same dashboard, look at "Requests by route" and "Responses by status". They show whether every route fails or one.
 3. Scroll to "Errors and warnings". Each line is one failure, and its `error` field holds the message and the place in the code.
-4. A line carries a `traceId`. In Grafana's Explore, pick Tempo and paste it: the trace shows which step of the request failed, such as a database query or a call to another app.
+4. Open one of those lines. Its details hold a link named Trace, which opens the whole request: the trace shows which step failed, such as a database query or a call to another app.
 5. Look at "Version" at the top. A version that changed minutes before the errors began points at the last deploy.
 
 ## How to fix
