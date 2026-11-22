@@ -4,7 +4,7 @@ const floor = 90;
 
 export default defineConfig({
   test: {
-    include: ['test/**/*.test.ts'],
+    projects: ['*/vitest.config.ts', { test: { name: 'repo', include: ['test/**/*.test.ts'] } }],
     coverage: {
       provider: 'v8',
       include: ['*/src/**/*.ts'],

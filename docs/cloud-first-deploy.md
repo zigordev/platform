@@ -4,12 +4,12 @@ Nothing in this repo reaches production yet. Production is built in phase 3, and
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                            | State on 2026-11-22 |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------- |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, which a product starts | Not yet. Phase 2    |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Not yet. Phase 3    |
-| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3    |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3    |
+| What                                                 | How it will travel                                                                            | State on 2026-11-22                                                          |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, which a product starts | They run from this repo. The package is published in a later step of phase 2 |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Not yet. Phase 3                                                             |
+| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                             |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                             |
 
 ## The path of a change
 
