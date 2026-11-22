@@ -15,7 +15,8 @@
     "bin",
     "dist",
     "compose.yaml",
-    "compose.local.yaml"
+    "compose.local.yaml",
+    "observability"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

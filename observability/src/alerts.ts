@@ -1,0 +1,61 @@
+import { appPanels, platformPanels } from './dashboards.ts';
+import type { Alert } from './resources.ts';
+
+const apps = 'service_name!="traefik"';
+const requests = 'http_server_request_duration_seconds_count';
+const buckets = 'http_server_request_duration_seconds_bucket';
+
+export const slowestAllowed = 1;
+
+export const alerts: readonly Alert[] = [
+  {
+    uid: 'app-answers-with-errors',
+    title: 'An app answers with errors',
+    summary:
+      'More than 5% of the requests to {{ $labels.service_name }} have failed with a server error for 5 minutes',
+    expr: `(sum by (service_name) (rate(${requests}{${apps}, http_response_status_code=~"5.."}[5m])) / sum by (service_name) (rate(${requests}{${apps}}[5m]))) > 0.05`,
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'phone',
+    runbook: 'app-answers-with-errors.md',
+    dashboard: 'app',
+    panel: appPanels.failing,
+  },
+  {
+    uid: 'app-is-slow',
+    title: 'An app is slow',
+    summary: `The slowest 5% of the requests to {{ $labels.service_name }} have taken longer than ${slowestAllowed} second for 10 minutes`,
+    expr: `histogram_quantile(0.95, sum by (service_name, le) (rate(${buckets}{${apps}}[5m]))) > ${slowestAllowed}`,
+    lookBack: '10m',
+    for: '10m',
+    reaches: 'phone',
+    runbook: 'app-is-slow.md',
+    dashboard: 'app',
+    panel: appPanels.slowest,
+  },
+  {
+    uid: 'host-is-filling-up',
+    title: 'The host is filling up',
+    summary: 'The memory of the host is more than 85% in use, or one of its disks more than 80%',
+    expr: '(1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)) > 0.85 or (1 - max by (device) (node_filesystem_avail_bytes) / max by (device) (node_filesystem_size_bytes)) > 0.8',
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'phone',
+    runbook: 'host-is-filling-up.md',
+    dashboard: 'platform',
+    panel: platformPanels.machineOverTime,
+  },
+  {
+    uid: 'telemetry-went-silent',
+    title: 'Telemetry went silent',
+    summary:
+      'The telemetry agent has reported nothing for 10 minutes, so nothing else is known either',
+    expr: 'absent_over_time(alloy_build_info[10m])',
+    lookBack: '10m',
+    for: '0s',
+    reaches: 'phone',
+    runbook: 'telemetry-went-silent.md',
+    dashboard: 'platform',
+    panel: platformPanels.agent,
+  },
+];

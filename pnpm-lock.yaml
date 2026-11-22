@@ -179,6 +179,9 @@ catalogs:
     '@commitlint/cli':
       specifier: 21.2.4
       version: 21.2.4
+    '@grafana/grafana-foundation-sdk':
+      specifier: 0.0.22
+      version: 0.0.22
     '@types/node':
       specifier: 26.6.6
       version: 26.6.6
@@ -232,6 +235,22 @@ importers:
       markdownlint-cli2:
         specifier: 'catalog:'
         version: 0.24.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.1(@types/node@26.6.6)(@vitest/coverage-v8@5.1.1)(vite@8.3.8(@types/node@26.6.6)(jiti@2.7.0))
+
+  observability:
+    dependencies:
+      '@grafana/grafana-foundation-sdk':
+        specifier: 'catalog:'
+        version: 0.0.22
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -440,6 +459,9 @@ packages:
 
   '@emnapi/wasi-threads@2.2.0':
     resolution: {integrity: sha512-JP7OYH38Q7+pyTAe14raZHLQIK7BDKbdwji+Xi3pcd/6QkJYQH3SX4wu6EplGrGJWRepoNzedfm0G3B9Z4e9Rw==}
+
+  '@grafana/grafana-foundation-sdk@0.0.22':
+    resolution: {integrity: sha512-AbjJEIFoSlvyfc9Ks/RaNKHPx3v/oX9znjnQxB+xPWoqVoMuhaTHTUFpaEGYDO+YcZ00jTZBMQ9an9iW/uKV6g==}
 
   '@jridgewell/resolve-uri@3.1.3':
     resolution: {integrity: sha512-lhTtjtoEArWBjismtfS761S9Hlyn+nIZqOZVYoZ1Xn82PMNMVnk+jj/NhC4fAXGTs7ydONcJiR5vyQBTMDu27g==}
@@ -1741,6 +1763,10 @@ snapshots:
       tslib: 2.9.1
     optional: true
 
+  '@grafana/grafana-foundation-sdk@0.0.22':
+    dependencies:
+      tslib: 2.9.1
+
   '@jridgewell/resolve-uri@3.1.3': {}
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
@@ -2630,8 +2656,7 @@ snapshots:
     dependencies:
       is-number: 7.0.0
 
-  tslib@2.9.1:
-    optional: true
+  tslib@2.9.1: {}
 
   typescript@7.0.2:
     optionalDependencies:

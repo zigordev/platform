@@ -32,6 +32,8 @@ export interface Service {
   readonly volumes?: readonly Mount[];
   readonly networks?: Readonly<Record<string, unknown>>;
   readonly healthcheck?: { readonly test?: readonly string[] };
+  readonly profiles?: readonly string[];
+  readonly tmpfs?: readonly string[];
 }
 
 export interface Model {
@@ -44,10 +46,17 @@ export interface Model {
 
 const folder = fileURLToPath(new URL('../', import.meta.url));
 
-export function model(...files: readonly string[]): Model {
+export function model(files: readonly string[], profile?: string): Model {
   const output = execFileSync(
     'docker',
-    ['compose', ...files.flatMap((file) => ['--file', file]), 'config', '--format', 'json'],
+    [
+      'compose',
+      ...files.flatMap((file) => ['--file', file]),
+      ...(profile === undefined ? [] : ['--profile', profile]),
+      'config',
+      '--format',
+      'json',
+    ],
     { cwd: folder, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
   );
   return JSON.parse(output) as Model;

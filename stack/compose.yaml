@@ -171,10 +171,61 @@ services:
             }
           }
         }
+
+        prometheus.exporter.self "alloy" { }
+
+        prometheus.exporter.unix "host" {
+          procfs_path    = "/host/proc"
+          sysfs_path     = "/host/sys"
+          rootfs_path    = "/host/root"
+          set_collectors = ["cpu", "meminfo", "filesystem"]
+        }
+
+        prometheus.scrape "machine" {
+          targets = array.concat(
+            prometheus.exporter.self.alloy.targets,
+            prometheus.exporter.unix.host.targets,
+          )
+          scrape_interval = "60s"
+          forward_to      = [prometheus.relabel.machine.receiver]
+        }
+
+        prometheus.relabel "machine" {
+          forward_to = [otelcol.receiver.prometheus.machine.receiver]
+
+          rule {
+            source_labels = ["__name__", "mode", "fstype"]
+            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)"
+            action        = "keep"
+          }
+
+          rule {
+            source_labels = ["job"]
+            regex         = "integrations/self"
+            target_label  = "job"
+            replacement   = "alloy"
+          }
+
+          rule {
+            source_labels = ["job"]
+            regex         = "integrations/unix"
+            target_label  = "job"
+            replacement   = "host"
+          }
+        }
+
+        otelcol.receiver.prometheus "machine" {
+          output {
+            metrics = [otelcol.processor.batch.apps.input]
+          }
+        }
     tmpfs:
       - /tmp
     volumes:
       - alloy-data:/var/lib/alloy/data
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
     healthcheck:
       test:
         - CMD

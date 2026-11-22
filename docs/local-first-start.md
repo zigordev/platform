@@ -23,12 +23,12 @@ pnpm check
 pnpm local:up
 ```
 
-| Step            | What it does                                                                                                                       | How you know it worked                                                                              |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `mise install`  | Installs the pinned tools for this folder. The first time, mise asks you to trust the repo's `mise.toml`: answer with `mise trust` | `node --version` prints the version that `mise.toml` names                                          |
-| `pnpm install`  | Installs the dependencies from the lockfile, and installs the git hooks                                                            | Its last lines say `sync hooks` and name `pre-commit`, `commit-msg` and `pre-push`                  |
-| `pnpm check`    | Runs what the pipeline runs: lint, build, type check, and the tests with coverage                                                  | It ends with `check took` and a number of seconds, with no error above that line                    |
-| `pnpm local:up` | Starts the five shared services and waits until each one is healthy. The first time, it downloads their images, about 5 GB         | It ends with "The shared services are up:" and four addresses, and `http://grafana.localhost` opens |
+| Step            | What it does                                                                                                                                                                                         | How you know it worked                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `mise install`  | Installs the pinned tools for this folder. The first time, mise asks you to trust the repo's `mise.toml`: answer with `mise trust`                                                                   | `node --version` prints the version that `mise.toml` names                                          |
+| `pnpm install`  | Installs the dependencies from the lockfile, and installs the git hooks                                                                                                                              | Its last lines say `sync hooks` and name `pre-commit`, `commit-msg` and `pre-push`                  |
+| `pnpm check`    | Runs what the pipeline runs: lint, build, type check, and the tests with coverage                                                                                                                    | It ends with `check took` and a number of seconds, with no error above that line                    |
+| `pnpm local:up` | Builds the dashboard files, starts the five shared services and waits until each one is healthy, then pushes the dashboards and the alert rules. The first time, it downloads the images, about 5 GB | It ends with "The shared services are up:" and four addresses, and `http://grafana.localhost` opens |
 
 One dependency is our own. `@zigordev/dev` holds the developer setup that every zigordev repo shares, and `pnpm install` takes it from the public npm registry like any other package.
 
@@ -40,6 +40,8 @@ One dependency is our own. `@zigordev/dev` holds the developer setup that every 
 | `http://mail.localhost`    | Mailpit, with every email that was sent on this laptop                 |
 | `http://traefik.localhost` | The routes the ingress knows                                           |
 | `http://alloy.localhost`   | What the telemetry agent receives, and whether each part is healthy    |
+
+In Grafana, the folder `zigordev` under Dashboards holds two dashboards: App, for one app picked from a list, and Platform, for the machine and the ingress. Under Alerting there are four rules, which on a laptop notify nobody.
 
 A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself and are not reachable from the network it is on.
 

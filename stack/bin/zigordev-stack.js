@@ -12,6 +12,7 @@ const { main } = await import(entry.href);
 process.exitCode = main(process.argv.slice(2), {
   folder: fileURLToPath(new URL('../', import.meta.url)),
   interact: (command, args, cwd) => spawnSync(command, args, { cwd, stdio: 'inherit' }).status ?? 1,
+  has: (path) => existsSync(path),
   write: (text) => {
     process.stdout.write(text);
   },

@@ -1,24 +1,26 @@
 # @zigordev/stack
 
-The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, a local Grafana and a mail catcher. They are two compose files and one command that starts them.
+The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, a local Grafana and a mail catcher. They are two compose files, the standard dashboards and alert rules, and one command that starts it all.
 
 ## What it is
 
 Five containers that every product on the laptop shares. Three of them run in production too, from the same file.
 
-| Service        | Image                        | What it does                                                                                                                  | Runs        |
-| -------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `traefik`      | Traefik 3.7                  | The ingress. It sends each address to its container, from the labels that the container carries                               | Everywhere  |
-| `docker-proxy` | wollomatic/socket-proxy 1.14 | A filtered door to Docker. It lets the ingress and the agent read which containers exist, and nothing else                    | Everywhere  |
-| `alloy`        | Grafana Alloy 1.22           | The telemetry agent. It receives traces and metrics from every app, reads every container's log lines, and forwards all of it | Everywhere  |
-| `lgtm`         | grafana/otel-lgtm 0.41       | The local Grafana, with its stores for logs, traces and metrics in the same container                                         | Laptop only |
-| `mailpit`      | Mailpit 1.34                 | The mail catcher. It receives every email an app sends on the laptop, and shows it on a page                                  | Laptop only |
+| Service        | Image                        | What it does                                                                                                                                                | Runs                      |
+| -------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `traefik`      | Traefik 3.7                  | The ingress. It sends each address to its container, from the labels that the container carries                                                             | Everywhere                |
+| `docker-proxy` | wollomatic/socket-proxy 1.14 | A filtered door to Docker. It lets the ingress and the agent read which containers exist, and nothing else                                                  | Everywhere                |
+| `alloy`        | Grafana Alloy 1.22           | The telemetry agent. It receives traces and metrics from every app, reads every container's log lines and the machine's own numbers, and forwards all of it | Everywhere                |
+| `lgtm`         | grafana/otel-lgtm 0.41       | The local Grafana, with its stores for logs, traces and metrics in the same container                                                                       | Laptop only               |
+| `mailpit`      | Mailpit 1.34                 | The mail catcher. It receives every email an app sends on the laptop, and shows it on a page                                                                | Laptop only               |
+| `gcx`          | Grafana gcx 1.8              | Not a service but a job: it pushes the dashboards and the alert rules to the local Grafana, and ends                                                        | Laptop only, on each `up` |
 
-| File                 | What it holds                                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `compose.yaml`       | The three services that run everywhere, with the agent's config inside                                     |
-| `compose.local.yaml` | What only the laptop has: the two other services, the local addresses, the published port and the settings |
-| `bin/` and `src/`    | The command `zigordev-stack`, which starts and stops them                                                  |
+| File                 | What it holds                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `compose.yaml`       | The three services that run everywhere, with the agent's config inside                                                     |
+| `compose.local.yaml` | What only the laptop has: the two other services, the local addresses, the published port and the settings                 |
+| `observability/`     | The dashboards and the alert rules as files, which `pnpm build` writes from the code in the repo's `observability/` folder |
+| `bin/` and `src/`    | The command `zigordev-stack`, which starts and stops them                                                                  |
 
 ```mermaid
 flowchart LR
@@ -71,6 +73,27 @@ The ingress routes only to a container that asked for it and whose health check 
 
 The agent reads the log lines of every container on the two networks, through the proxy, and of no other container on the machine. It looks for new containers every 5 seconds, so a job that runs for a few seconds is not missed.
 
+### What the agent reports by itself
+
+| What                                                             | From                                                           | Kept                                                                   |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Its own heartbeat, under the name `alloy`                        | Itself                                                         | One series. An alert fires when it has been missing for 10 minutes     |
+| The machine's processor, memory and disks, under the name `host` | Three read-only mounts of the machine: `/proc`, `/sys` and `/` | Only the series that a dashboard or an alert uses, and only real disks |
+
+The three mounts let the agent read the machine's numbers. It runs as a user that is not root, so it reads only what every user of the machine may read. On the laptop "the machine" is the small Linux machine inside Docker Desktop.
+
+### Dashboards and alert rules
+
+`zigordev-stack up` ends by pushing seven files to the local Grafana, with gcx: one folder, two dashboards and four alert rules. A second push changes nothing.
+
+| In Grafana                              | What it shows                                                                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboards, folder `zigordev`, App      | One app, picked from a list: whether it reports, its version, its requests, the share that fail, its response times, its events and its errors |
+| Dashboards, folder `zigordev`, Platform | The machine's processor, memory and disks, the requests at the ingress, and who is reporting                                                   |
+| Alerting, four rules                    | [The runbooks](../docs/runbooks/README.md) list them. On the laptop they show in Grafana and notify nobody                                     |
+
+A new app needs no entry anywhere. It appears in the list of the App dashboard with its first request, and every rule covers it.
+
 ### Each container is boxed in
 
 | Rule                                                                            | Why                                                            |
@@ -82,7 +105,7 @@ The agent reads the log lines of every container on the two networks, through th
 | A user that is not root, and a read-only file system                            | A flaw in the service cannot change the service                |
 | No published port, except port 80 of the ingress, on this laptop itself         | Nothing is reachable from the network the laptop is on         |
 
-`src/compose.test.ts` holds every service to these rules, one by one. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
+`src/compose.test.ts` holds every service to these rules, one by one, and the job `gcx` to all but the health check, which a job that ends does not need. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
 
 | Service        | Memory limit | CPU limit | Used when idle on 2026-11-22 |
 | -------------- | ------------ | --------- | ---------------------------- |
@@ -131,7 +154,7 @@ pnpm local:down
 pnpm local:reset
 ```
 
-`local:up` starts the services and waits until each one is healthy. It then prints the four addresses. `local:down` stops them and keeps their data. `local:reset` stops them, deletes their data and starts them again.
+`local:up` builds the dashboard files, starts the services and waits until each one is healthy. It then pushes the dashboards and the alert rules, and prints the four addresses. `local:down` stops them and keeps their data. `local:reset` stops them, deletes their data and starts them again.
 
 | Address                    | What opens                                                            |
 | -------------------------- | --------------------------------------------------------------------- |
@@ -169,20 +192,25 @@ Another repo will take this package from npm and start it with `zigordev-stack u
 
 ## How to check that it works, and what to do when it does not
 
-| Try this                                                           | What must happen                                                  |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `pnpm local:up`                                                    | It ends with "The shared services are up:" and the four addresses |
-| `pnpm local:up` a second time                                      | The same, within seconds, and no container is recreated           |
-| Open `http://grafana.localhost` and `http://mail.localhost`        | Both pages open, with no sign-in                                  |
-| In Grafana's Explore, pick Loki and run `{service_name="traefik"}` | Traefik's own log lines show                                      |
-| Open `http://nothing.localhost`                                    | Traefik answers 404, because no container asked for that address  |
-| `pnpm exec vitest run stack`                                       | Every rule on this page that a machine can check passes           |
+| Try this                                                                     | What must happen                                                                    |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `pnpm local:up`                                                              | It ends with "The shared services are up:" and the four addresses                   |
+| `pnpm local:up` a second time                                                | The same, within seconds, and no container is recreated                             |
+| Open `http://grafana.localhost`, then Dashboards, then the folder `zigordev` | The dashboards App and Platform are there, and Platform shows the machine's numbers |
+| In Grafana, open Alerting, then Alert rules                                  | Four rules are listed in the folder `zigordev`, each one "Normal"                   |
+| Open `http://grafana.localhost` and `http://mail.localhost`                  | Both pages open, with no sign-in                                                    |
+| In Grafana's Explore, pick Loki and run `{service_name="traefik"}`           | Traefik's own log lines show                                                        |
+| Open `http://nothing.localhost`                                              | Traefik answers 404, because no container asked for that address                    |
+| `pnpm exec vitest run stack`                                                 | Every rule on this page that a machine can check passes                             |
 
 | What you see                                                                    | What it means                                                                        | What to do                                                                                                         |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | `Cannot connect to the Docker daemon`                                           | Docker is not running                                                                | Start Docker Desktop                                                                                               |
 | `Bind for 127.0.0.1:80 failed: port is already allocated`                       | Another program on the laptop holds port 80                                          | Find it with `lsof -nP -iTCP:80 -sTCP:LISTEN`, and stop it                                                         |
 | `local:up` ends with "not every shared service became healthy"                  | One container did not pass its health check in 5 minutes                             | The lines above name it. `docker logs platform-<service>-1` shows why                                              |
+| `zigordev-stack up` says "the dashboard files are missing"                      | The files in `stack/observability/` are built, not committed                         | `pnpm build`, which `pnpm local:up` does by itself                                                                 |
+| `local:up` says the dashboards and the alert rules could not be pushed          | gcx could not reach Grafana, or Grafana refused a file                               | The lines above name the file and the reason. `pnpm exec vitest run observability` checks the files' shape         |
+| A dashboard or a rule that was removed from the code is still in Grafana        | gcx does not delete what the files no longer hold                                    | `pnpm local:reset` empties the local Grafana                                                                       |
 | `docker-proxy` is unhealthy, and its log says `permission denied` on the socket | The group in `compose.local.yaml` does not own Docker's socket on this machine       | Set the group that does. `docker run --rm -v /var/run/docker.sock:/s alpine stat -c %g /s` prints it               |
 | An app answers on its own port and Traefik answers 404 for its address          | The app is not on the network `zigordev`, has no `traefik.enable`, or is not healthy | `http://traefik.localhost` lists the routes Traefik knows. A container without a passing health check is not there |
 | An app's log lines do not show in Grafana                                       | The app is not on the network `zigordev`, so the agent does not read it              | Add the network to the app's service                                                                               |
