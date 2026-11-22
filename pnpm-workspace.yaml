@@ -1,0 +1,23 @@
+catalog:
+  "@biomejs/biome": 2.6.8
+  "@commitlint/cli": 21.2.4
+  "@types/node": 26.6.6
+  "@vitest/coverage-v8": 5.1.1
+  "@zigordev/dev": 1.1.0
+  lefthook: 2.2.1
+  markdownlint-cli2: 0.24.2
+  typescript: 7.0.2
+  vitest: 5.1.1
+
+catalogMode: strict
+
+overrides:
+  katex: 0.19.1
+
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@zigordev/*"
+trustPolicy: no-downgrade
+
+allowBuilds:
+  lefthook: false
