@@ -13,7 +13,7 @@ The infrastructure and the shared services of every zigordev product: the ingres
 | `docs/runbooks/`           | One page for each alert, named after the alert                                                                      |
 | `docs/`                    | The standard docs, and the decision records in `docs/adr/`                                                          |
 | `.claude/`                 | A copy of the shared rules, skills, hooks and permissions. `toolkit` owns them                                      |
-| `.github/workflows/ci.yml` | The caller of the pipeline in `toolkit`, pinned to one commit of it                                                 |
+| `.github/workflows/ci.yml` | The callers of the pipeline and of the release in `toolkit`, both pinned to one commit of it                        |
 | `test/`                    | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                            |
 | `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks and zizmor                                                           |
 | `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                 |
@@ -30,6 +30,7 @@ Two folders arrive in phase 3 of the build plan: `infra/` and `host/`.
 - `pnpm exec vitest run <path>` runs one test file.
 - `pnpm exec zigordev check [rule...] [file...]` runs the rules a machine can check, all of them or the ones named.
 - `pnpm exec zigordev sync` copies the shared files from `@zigordev/dev` into this repo.
+- `pnpm exec zigordev release plan` says which public packages npm lacks at the latest tagged version. It changes nothing.
 - `pnpm local:up` builds, starts the shared services, waits until each is healthy, and pushes the dashboards and alert rules. `pnpm local:down` stops them and keeps their data. `pnpm local:reset` deletes the data too.
 
 ## Rules of this repo
@@ -38,7 +39,8 @@ Two folders arrive in phase 3 of the build plan: `infra/` and `host/`.
 - A shared file is never edited here: `.claude/`, `lefthook.yml`, `.commitlintrc.json`, `.markdownlint-cli2.jsonc`, `renovate.json` and the pull request template. Change it in `toolkit`, then run `pnpm exec zigordev sync` here, or `pnpm check` fails.
 - A version lives once, in the `catalog` of `pnpm-workspace.yaml`, as an exact version. `package.json` refers to it with `catalog:`.
 - An entry under `overrides` in `pnpm-workspace.yaml` replaces a dependency of a dependency that has a known flaw, when the package that brings it in offers no fixed version. The entry goes when that package takes a fixed version itself.
-- The pipeline is called at a commit of `toolkit` that a version tag names, with that version beside it. Renovate proposes the next one.
+- The pipeline and the release are called at one commit of `toolkit` that a version tag names, with that version beside it. Renovate proposes the next one, together with `@zigordev/dev`.
+- A change to the shared services, the dashboards or the alert rules has a title that starts with `feat` or `fix`. Any other type releases nothing, so no product would receive the change.
 - The job named `check` is the required check in every repo. It is never renamed.
 - Coverage counts the `src` folder of every top-level folder, with a floor of 90%.
 - `stack/compose.yaml` holds what runs everywhere, and `stack/compose.local.yaml` what only the laptop has. No service mounts a file from the package folder, and the agent's config in `ALLOY_CONFIG` holds no dollar sign. Record 0002 says why.
