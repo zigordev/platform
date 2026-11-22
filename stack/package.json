@@ -1,0 +1,37 @@
+{
+  "name": "@zigordev/stack",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, a local Grafana and a mail catcher, as compose files with one command that starts them",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "bin": {
+    "zigordev-stack": "./bin/zigordev-stack.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "compose.yaml",
+    "compose.local.yaml"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zigordev/platform.git",
+    "directory": "stack"
+  }
+}

@@ -1,0 +1,77 @@
+export type Interact = (command: string, args: readonly string[], cwd: string) => number;
+
+export interface Io {
+  readonly folder: string;
+  readonly interact: Interact;
+  readonly write: (text: string) => void;
+}
+
+export const files = ['compose.yaml', 'compose.local.yaml'] as const;
+
+export const addresses = [
+  ['http://grafana.localhost', 'Grafana: the logs, traces and metrics of every app'],
+  ['http://mail.localhost', 'Mailpit: every email sent on this laptop'],
+  ['http://traefik.localhost', 'Traefik: the routes it knows'],
+  ['http://alloy.localhost', 'Alloy: what it receives and where it sends it'],
+] as const;
+
+const usage = [
+  'Usage: zigordev-stack up',
+  '       zigordev-stack down',
+  '       zigordev-stack reset',
+  '',
+  'up     Starts the shared services and waits until each one is healthy.',
+  '       When they are running already, it changes nothing.',
+  'down   Stops them and keeps their data.',
+  'reset  Stops them, deletes their data and starts them again.',
+  '',
+].join('\n');
+
+function compose(io: Io, ...args: readonly string[]): number {
+  return io.interact(
+    'docker',
+    ['compose', ...files.flatMap((file) => ['--file', file]), ...args],
+    io.folder
+  );
+}
+
+function up(io: Io): number {
+  const code = compose(io, 'up', '--detach', '--wait', '--wait-timeout', '300');
+  if (code !== 0) {
+    io.write(
+      'zigordev-stack: not every shared service became healthy. The lines above name the one that did not\n'
+    );
+    return code;
+  }
+  const width = Math.max(...addresses.map(([address]) => address.length)) + 2;
+  io.write(
+    [
+      'The shared services are up:',
+      ...addresses.map(([address, what]) => `  ${address.padEnd(width)}${what}`),
+      '',
+    ].join('\n')
+  );
+  return 0;
+}
+
+function reset(io: Io): number {
+  const code = compose(io, 'down', '--volumes');
+  return code === 0 ? up(io) : code;
+}
+
+export function main(args: readonly string[], io: Io): number {
+  const [command, ...rest] = args;
+  if (rest.length === 0) {
+    if (command === 'up') {
+      return up(io);
+    }
+    if (command === 'down') {
+      return compose(io, 'down');
+    }
+    if (command === 'reset') {
+      return reset(io);
+    }
+  }
+  io.write(usage);
+  return 2;
+}

@@ -1,0 +1,200 @@
+name: platform
+
+services:
+  docker-proxy:
+    image: wollomatic/socket-proxy:1.14.0
+    command:
+      - -loglevel=info
+      - -logjson
+      - -listenip=0.0.0.0
+      - -allowfrom=traefik,alloy
+      - -allowGET=/v1\..{1,2}/(version|info|events.*|containers/json.*|containers/[^/]+/json|containers/[^/]+/logs.*|networks.*)
+      - -allowHEAD=/_ping
+      - -allowhealthcheck
+      - -shutdowngracetime=5
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    mem_limit: 64m
+    cpus: 0.25
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: [CMD, ./healthcheck]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [docker]
+
+  traefik:
+    image: traefik:v3.7.19
+    user: "65532:65532"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    mem_limit: 128m
+    cpus: 1
+    environment:
+      USER: traefik
+      TRAEFIK_GLOBAL_CHECKNEWVERSION: "false"
+      TRAEFIK_GLOBAL_SENDANONYMOUSUSAGE: "false"
+      TRAEFIK_GLOBAL_ALIASHEADERSSTRATEGY: delete
+      TRAEFIK_LOG_LEVEL: INFO
+      TRAEFIK_LOG_FORMAT: json
+      TRAEFIK_ENTRYPOINTS_WEB_ADDRESS: ":8080"
+      TRAEFIK_ENTRYPOINTS_PING_ADDRESS: ":8082"
+      TRAEFIK_PING: "true"
+      TRAEFIK_PING_ENTRYPOINT: ping
+      TRAEFIK_PROVIDERS_DOCKER: "true"
+      TRAEFIK_PROVIDERS_DOCKER_ENDPOINT: tcp://docker-proxy:2375
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: "false"
+      TRAEFIK_PROVIDERS_DOCKER_NETWORK: zigordev
+      TRAEFIK_METRICS_OTLP: "true"
+      TRAEFIK_METRICS_OTLP_HTTP_ENDPOINT: http://alloy:4318/v1/metrics
+    healthcheck:
+      test: [CMD, traefik, healthcheck]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      docker-proxy:
+        condition: service_healthy
+    networks: [zigordev, docker]
+
+  alloy:
+    image: grafana/alloy:v1.22.0
+    entrypoint:
+      - sh
+      - -c
+      - printf '%s' "$$ALLOY_CONFIG" > /tmp/config.alloy && exec alloy "$$@"
+      - alloy
+    command:
+      - run
+      - /tmp/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --disable-reporting
+    user: "473:473"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 20s
+    mem_limit: 256m
+    cpus: 1
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
+      ALLOY_CONFIG: |
+        otelcol.receiver.otlp "apps" {
+          grpc {
+            endpoint = "0.0.0.0:4317"
+          }
+
+          http {
+            endpoint = "0.0.0.0:4318"
+          }
+
+          output {
+            metrics = [otelcol.processor.batch.apps.input]
+            logs    = [otelcol.processor.batch.apps.input]
+            traces  = [otelcol.processor.batch.apps.input]
+          }
+        }
+
+        otelcol.processor.batch "apps" {
+          output {
+            metrics = [otelcol.exporter.otlphttp.destination.input]
+            logs    = [otelcol.exporter.otlphttp.destination.input]
+            traces  = [otelcol.exporter.otlphttp.destination.input]
+          }
+        }
+
+        otelcol.auth.basic "destination" {
+          username = sys.env("OTLP_USERNAME")
+          password = sys.env("OTLP_PASSWORD")
+        }
+
+        otelcol.exporter.otlphttp "destination" {
+          client {
+            endpoint = sys.env("OTLP_DESTINATION")
+            auth     = otelcol.auth.basic.destination.handler
+          }
+        }
+
+        discovery.docker "containers" {
+          host             = sys.env("DOCKER_HOST")
+          refresh_interval = "5s"
+
+          filter {
+            name   = "network"
+            values = ["zigordev", "zigordev-docker"]
+          }
+        }
+
+        discovery.relabel "containers" {
+          targets = discovery.docker.containers.targets
+
+          rule {
+            source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+            target_label  = "service_name"
+          }
+
+          rule {
+            source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+            target_label  = "compose_project"
+          }
+
+          rule {
+            source_labels = ["__meta_docker_container_name"]
+            regex         = "/(.*)"
+            target_label  = "container"
+          }
+        }
+
+        loki.source.docker "containers" {
+          host       = sys.env("DOCKER_HOST")
+          targets    = discovery.relabel.containers.output
+          forward_to = [loki.write.destination.receiver]
+        }
+
+        loki.write "destination" {
+          endpoint {
+            url = sys.env("LOKI_DESTINATION")
+
+            basic_auth {
+              username = sys.env("LOKI_USERNAME")
+              password = sys.env("LOKI_PASSWORD")
+            }
+          }
+        }
+    tmpfs:
+      - /tmp
+    volumes:
+      - alloy-data:/var/lib/alloy/data
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/12345 && printf 'GET /-/ready HTTP/1.0\r\n\r\n' >&3 && grep -q '200 OK' <&3
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    depends_on:
+      docker-proxy:
+        condition: service_healthy
+    networks: [zigordev, docker]
+
+networks:
+  zigordev:
+    name: zigordev
+  docker:
+    name: zigordev-docker
+    internal: true
+
+volumes:
+  alloy-data:
