@@ -23,16 +23,18 @@ flowchart LR
   run --> release["Tag the next version and publish the package"]
 ```
 
-The pipeline is not written here. `.github/workflows/ci.yml` calls the one that `toolkit` holds, at one pinned commit, so this repo is checked exactly as every other repo is. It has four jobs. This repo adds one of its own, which starts the shared services for real. One gate passes only when all of them passed:
+The pipeline is not written here. `.github/workflows/ci.yml` calls the one that `toolkit` holds, at one pinned commit, so this repo is checked exactly as every other repo is. It has four jobs. This repo adds three of its own: one starts the shared services for real, and two plan and apply the infrastructure. One gate passes only when all of them passed:
 
-| Job             | What it checks                                                                                                                 | Runs on                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
-| Quality         | `pnpm check`, exactly as on a laptop                                                                                           | Every pull request and every merge |
-| Title           | The pull request's title is a Conventional Commit                                                                              | Pull requests                      |
-| Dependencies    | No dependency the pull request adds has a known flaw                                                                           | Pull requests                      |
-| Code scan       | CodeQL finds no vulnerable pattern in our own code or in the workflows                                                         | Every pull request and every merge |
-| Shared services | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers | Every pull request and every merge |
-| `check`         | Every job above passed                                                                                                         | Every pull request and every merge |
+| Job                  | What it checks                                                                                                                                                | Runs on                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Quality              | `pnpm check`, exactly as on a laptop                                                                                                                          | Every pull request and every merge                      |
+| Title                | The pull request's title is a Conventional Commit                                                                                                             | Pull requests                                           |
+| Dependencies         | No dependency the pull request adds has a known flaw                                                                                                          | Pull requests                                           |
+| Code scan            | CodeQL finds no vulnerable pattern in our own code or in the workflows                                                                                        | Every pull request and every merge                      |
+| Shared services      | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers                                | Every pull request and every merge                      |
+| Infrastructure plan  | Signs in to AWS with the read-only role and plans every stack in `infra/`. The plan of each stack shows in the run's summary, which the pull request links to | Every pull request of this repo and every merge         |
+| `check`              | Every job above passed                                                                                                                                        | Every pull request and every merge                      |
+| Infrastructure apply | Waits for the owner's approval in GitHub, signs in with the apply role, and applies every stack whose plan changed, except the bootstrap                      | A merge whose plan changed a stack the pipeline applies |
 
 Every job names the Ubuntu it runs on, exactly: the gate runs on Ubuntu 26.04, and Shared services on Ubuntu 26.04 for arm64, the kind of machine the server will be. No job uses GitHub's `ubuntu-latest`, which GitHub moves to a new version by itself. A new Ubuntu therefore arrives as a pull request from Renovate, and as a major version it waits a month and for the owner. The jobs that `toolkit` holds follow the same rule.
 
@@ -129,6 +131,21 @@ Measured against AWS's own price list for Ireland on 2026-11-23:
 | The spending check    | AWS's own default, which its FAQ calls "no effort or cost"                                          |
 | Sign-in and the roles | Free                                                                                                |
 
+## How a change reaches AWS
+
+Every stack in `infra/` is code, and every change to it is a pull request. Nothing in AWS, GitHub or another provider is changed by hand. The script `infra/run.sh` does the work in all three places below, so each one plans the same way.
+
+| When                      | What happens                                                                                                                                                                                 | Who acts                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| A pull request            | The job "Infrastructure plan" signs in with the read-only role and plans every stack. The run's summary holds each plan, with the account number hidden. A plan that fails turns `check` red | Nobody. The owner reads the plan in the summary                                          |
+| A merge to `main`         | The plan runs again. When a stack that the pipeline applies has changes, the job "Infrastructure apply" waits in the environment `infrastructure`                                            | The owner approves the run in GitHub: the run's page, then "Review deployments"          |
+| The approval              | The job signs in with the apply role, for one hour at most, and applies every changed stack                                                                                                  | Nobody                                                                                   |
+| Every Monday at 06:17 UTC | The workflow "Drift" plans every stack, the bootstrap included. When any stack differs from its code, the run fails, and GitHub emails the owner                                             | The owner reads the summary, then undoes the hand-made change or writes it into the code |
+
+The bootstrap is the one stack the pipeline never applies: [record 0005](adr/0005-the-bootstrap-is-applied-from-the-laptop-only.md) says why. Its plan still shows on every pull request, and its summary says to apply it from the laptop.
+
+The pipeline finds the roles by their full name, which holds the account number. The number is not in git: the owner set it once as the repository variable `AWS_ACCOUNT_ID`, and the sign-in hides it in the logs. [Record 0007](adr/0007-the-aws-account-number-lives-in-a-github-variable.md) says why.
+
 ## The settings on GitHub
 
 They were set by hand when the repo was created, on 2026-11-22, as a copy of the settings of `toolkit`. From phase 3 they are code in this repo.
@@ -142,6 +159,8 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | Dependency graph and Dependabot alerts | On                                                                                                                    | Dependency Review needs the graph, and the alerts tell the owner about a flaw in a dependency already in use |
 | Secret scanning with push protection   | On                                                                                                                    | A push that holds a known kind of secret is refused                                                          |
 | The token a workflow gets              | Read-only                                                                                                             | A job asks for each right it needs                                                                           |
+| The variable `AWS_ACCOUNT_ID`          | The AWS account's number, set by the owner                                                                            | The pipeline builds the roles' names from it, and the number stays out of the public repo                    |
+| The environment `infrastructure`       | Only the owner approves, administrators cannot skip it, and only `main` may run in it. The bootstrap creates it       | Every apply waits for the owner                                                                              |
 
 ## Looking after it
 
@@ -156,6 +175,9 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | The Release is red on `main`                       | Read which of its three jobs failed. Version: the titles could not be read, or the tag could not be written. Pack: the build failed. Publish: npm refused, most often because the package is not tied to this repo yet or the tie has expired, which only the owner can renew. The next merge finishes a release that stopped halfway |
 | The pipeline does not start at all                 | The caller names a commit of `toolkit` that does not hold the pipeline. Put the commit of a released version back, with its version beside it                                                                                                                                                                                         |
 | A pull request from Renovate is red, or stays open | [Dependency updates](https://github.com/zigordev/toolkit/blob/main/docs/handbook/dependency-updates.md), in the handbook, says what each case means                                                                                                                                                                                   |
+| Its Infrastructure plan job is red                 | The summary shows the failing stack. A sign-in that is refused means the variable `AWS_ACCOUNT_ID` is missing, or a role's trust does not name this repo in GitHub's form                                                                                                                                                             |
+| A merge waits on "Infrastructure apply"            | It waits for the owner. Open the run, read the plan in the summary of "Infrastructure plan", then "Review deployments"                                                                                                                                                                                                                |
+| The Drift run failed                               | Something in AWS, GitHub or another provider was changed outside the code. The summary names the stack and the change. Undo it, or write it into the code                                                                                                                                                                             |
 | A change has to be undone                          | Revert it through a pull request                                                                                                                                                                                                                                                                                                      |
 
 ## The one override

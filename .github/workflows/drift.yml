@@ -1,0 +1,43 @@
+name: Drift
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Infrastructure drift
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: Sign in to AWS with the read-only role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/platform-opentofu-plan
+          role-session-name: platform-drift-${{ github.run_id }}
+          aws-region: eu-west-1
+          mask-aws-account-id: true
+
+      - name: Plan every stack, and fail when one differs from its code
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: infra/run.sh drift

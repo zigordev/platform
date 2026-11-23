@@ -16,3 +16,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0004](0004-dashboards-and-alerts-are-code-pushed-by-gcx.md)                  | Dashboards and alert rules are code, pushed by gcx              | 2026-11-22 | accepted |
 | [0005](0005-the-bootstrap-is-applied-from-the-laptop-only.md)                 | The bootstrap is applied from the laptop only                   | 2026-11-23 | accepted |
 | [0006](0006-the-apply-role-is-an-administrator-behind-the-owners-approval.md) | The apply role is an administrator, behind the owner's approval | 2026-11-23 | accepted |
+| [0007](0007-the-aws-account-number-lives-in-a-github-variable.md)             | The AWS account number lives in a GitHub variable               | 2026-11-23 | accepted |

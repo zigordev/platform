@@ -35,15 +35,16 @@ describe('the pipeline of this repo', () => {
   it('ends in the gate named check, which passes only when the pipeline and the shared services passed', () => {
     const gate = job('check');
     expect(gate).toContain('name: check\n');
-    expect(gate).toContain('needs: [pipeline, stack]\n');
+    expect(gate).toContain('needs: [pipeline, stack, infra-plan]\n');
     expect(gate).toContain('if: always()\n');
     expect(gate).toContain('test "$PIPELINE" = "success"\n');
     expect(gate).toContain('test "$STACK" = "success"\n');
+    expect(gate).toContain('test "$INFRA" = "success"\n');
   });
 
   it('names the Ubuntu of each job it runs itself, so that only a pull request moves it', () => {
     const machines = [...caller.matchAll(/^ {4}runs-on: (.+)$/gm)].map((match) => match[1]);
-    expect(machines).toEqual(['ubuntu-26.04-arm', 'ubuntu-26.04']);
+    expect(machines).toEqual(['ubuntu-26.04-arm', 'ubuntu-26.04', 'ubuntu-26.04', 'ubuntu-26.04']);
   });
 
   it('runs on every pull request and on every merge to main', () => {
@@ -130,5 +131,72 @@ describe('the release of this repo', () => {
     expect(
       existsSync(new URL('../node_modules/semantic-release/package.json', import.meta.url))
     ).toBe(true);
+  });
+});
+
+const drift = read('../.github/workflows/drift.yml');
+const signIn =
+  /uses: aws-actions\/configure-aws-credentials@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}role-to-assume: arn:aws:iam::\$\{\{ vars\.AWS_ACCOUNT_ID \}\}:role\/(platform-opentofu-\w+)\n/;
+
+describe('the infrastructure plan', () => {
+  const plan = job('infra-plan');
+
+  it('signs in with the read-only role, the account number taken from a variable and hidden in the logs', () => {
+    expect(signIn.exec(plan)?.[1]).toBe('platform-opentofu-plan');
+    expect(plan).toContain('mask-aws-account-id: true\n');
+  });
+
+  it('may read the repo and ask GitHub for the proof AWS trusts, and nothing more', () => {
+    expect(plan).toContain('    permissions:\n      contents: read\n      id-token: write\n');
+  });
+
+  it('runs on every pull request of this repo and on main, but not for a fork, which gets no sign-in', () => {
+    expect(plan).toContain(
+      "if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository\n"
+    );
+  });
+
+  it('plans with the script that the apply and the drift check use too', () => {
+    expect(plan).toContain('run: infra/run.sh plan\n');
+    expect(plan).toMatch(/^ {6}apply: \$\{\{ steps\.plan\.outputs\.apply \}\}$/m);
+  });
+});
+
+describe('the infrastructure apply', () => {
+  const apply = job('infra-apply');
+
+  it('waits for the owner in the environment that the apply role trusts', () => {
+    expect(apply).toContain('environment: infrastructure\n');
+    expect(signIn.exec(apply)?.[1]).toBe('platform-opentofu-apply');
+  });
+
+  it('runs after the gate, on main only, and only when a stack the pipeline applies has changes', () => {
+    expect(apply).toContain('needs: [check, infra-plan]\n');
+    expect(apply).toContain(
+      "if: github.event_name == 'push' && needs.infra-plan.outputs.apply != ''\n"
+    );
+  });
+
+  it('applies with the script, which leaves the bootstrap to the laptop', () => {
+    expect(apply).toContain('run: infra/run.sh apply\n');
+  });
+});
+
+describe('the drift check', () => {
+  it('runs once a week, and can be started by hand', () => {
+    expect(drift).toContain('  schedule:\n    - cron: "17 6 * * 1"\n');
+    expect(drift).toContain('  workflow_dispatch:\n');
+  });
+
+  it('signs in with the read-only role, and fails when a stack differs from its code', () => {
+    expect(signIn.exec(drift)?.[1]).toBe('platform-opentofu-plan');
+    expect(drift).toContain('run: infra/run.sh drift\n');
+    expect(drift).not.toContain('platform-opentofu-apply');
+  });
+
+  it('names its machine exactly, and asks for no right beyond reading and the proof AWS trusts', () => {
+    expect(drift).toContain('runs-on: ubuntu-26.04\n');
+    expect(drift).toContain('\npermissions: {}\n');
+    expect(drift).toContain('    permissions:\n      contents: read\n      id-token: write\n');
   });
 });
