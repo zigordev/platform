@@ -10,20 +10,20 @@ The repo is being built step by step, and each step arrives as its own pull requ
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `stack/`                   | The shared services as two compose files, and the command that starts them: the ingress, the telemetry agent, a local Grafana and a mail catcher. It is the package `@zigordev/stack`          |
 | `observability/`           | The standard dashboards and the alert rules, as TypeScript: one dashboard for any app, one for the platform, and four rules that each cover every app at once                                  |
+| `infra/`                   | AWS, Cloudflare, GitHub and Grafana Cloud, described as code with OpenTofu. Today it holds `bootstrap/`, what an empty AWS account needs before the pipeline can change it                     |
 | `.claude/`                 | The rules, skills, hooks and permissions that every Claude Code session works under. They are a copy of the ones in `toolkit`                                                                  |
 | `CLAUDE.md`                | What a session needs to know about this repo: where things live, its commands and its own rules                                                                                                |
-| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks and zizmor                                                                                                                                      |
+| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                    |
 | `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                            |
 | `.github/workflows/ci.yml` | The pipeline of this repo, and the release that publishes its one package. Both are short callers of what `toolkit` holds, so this repo is checked and released exactly as every other repo is |
 | `test/`                    | The tests of the repo's own setup. The first one holds the pipeline caller to its agreed shape                                                                                                 |
 | `docs/`                    | The standard docs, the decision records, and in `docs/runbooks/` one page for each alert                                                                                                       |
 
-Two more folders arrive as the platform is built:
+One more folder arrives as the platform is built:
 
-| Folder   | What it will hold                                                                                            | Arrives in |
-| -------- | ------------------------------------------------------------------------------------------------------------ | ---------- |
-| `infra/` | AWS, Cloudflare, GitHub and Grafana Cloud, described as code                                                 | Phase 3    |
-| `host/`  | What the host runs at boot and on a deploy: its setup, the deploy script, the backups and the cleanup timers | Phase 3    |
+| Folder  | What it will hold                                                                                            | Arrives in |
+| ------- | ------------------------------------------------------------------------------------------------------------ | ---------- |
+| `host/` | What the host runs at boot and on a deploy: its setup, the deploy script, the backups and the cleanup timers | Phase 3    |
 
 The phases are the eight steps in which the whole platform is built. [The handbook in toolkit](https://github.com/zigordev/toolkit/blob/main/docs/handbook/README.md) lists them and explains every piece.
 
@@ -37,22 +37,24 @@ It also draws one line that is easy to check. Only this repo can change AWS, Clo
 
 The shared services are five containers. [stack/README.md](stack/README.md) explains each one.
 
-| Tool                      | What it does here                                                                                              |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Docker and Docker Compose | Run the shared services from the two compose files in `stack/`                                                 |
-| Traefik 3                 | The ingress. It sends each address to its container, from the labels the container carries                     |
-| socket-proxy              | The Docker proxy. It lets the ingress and the agent read which containers exist, and nothing else              |
-| Grafana Alloy             | The telemetry agent. It receives traces and metrics, reads every container's log lines, and forwards all of it |
-| otel-lgtm                 | The local Grafana, with its stores for logs, traces and metrics in one container. It runs on the laptop only   |
-| Mailpit                   | The mail catcher. It receives every email an app sends on the laptop. It runs on the laptop only               |
-| gcx                       | Grafana's command-line tool. It pushes the dashboards and the alert rules, as files, to the local Grafana      |
-| Grafana Foundation SDK    | A typed builder. The dashboards are written with it in TypeScript, so they are tested like any code            |
+| Tool                      | What it does here                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Docker and Docker Compose | Run the shared services from the two compose files in `stack/`                                                      |
+| Traefik 3                 | The ingress. It sends each address to its container, from the labels the container carries                          |
+| socket-proxy              | The Docker proxy. It lets the ingress and the agent read which containers exist, and nothing else                   |
+| Grafana Alloy             | The telemetry agent. It receives traces and metrics, reads every container's log lines, and forwards all of it      |
+| otel-lgtm                 | The local Grafana, with its stores for logs, traces and metrics in one container. It runs on the laptop only        |
+| Mailpit                   | The mail catcher. It receives every email an app sends on the laptop. It runs on the laptop only                    |
+| gcx                       | Grafana's command-line tool. It pushes the dashboards and the alert rules, as files, to the local Grafana           |
+| OpenTofu                  | Describes AWS, Cloudflare, GitHub and Grafana Cloud as code. Each change shows as a plan before anything is changed |
+| tflint                    | Checks the OpenTofu code for mistakes and unused parts                                                              |
+| Grafana Foundation SDK    | A typed builder. The dashboards are written with it in TypeScript, so they are tested like any code                 |
 
 The repo itself is built with the same tools as every zigordev repo:
 
 | Tool                         | What it does here                                                                                                                                                                                                        |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [mise](https://mise.jdx.dev) | Installs the exact Node.js, pnpm, gitleaks and zizmor versions that `mise.toml` pins                                                                                                                                     |
+| [mise](https://mise.jdx.dev) | Installs the exact Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint versions that `mise.toml` pins                                                                                                                   |
 | Node.js 26                   | Runs every script and every test                                                                                                                                                                                         |
 | pnpm 12                      | Installs the dependencies. It takes every version from one catalog, waits one day before it accepts a new release, blocks the install scripts of dependencies, and refuses a package whose publisher became less trusted |
 | TypeScript 7                 | Checks types in strict mode                                                                                                                                                                                              |

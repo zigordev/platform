@@ -4,21 +4,23 @@ The infrastructure and the shared services of every zigordev product: the ingres
 
 ## Where things live
 
-| Path                       | What it holds                                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `stack/`                   | `@zigordev/stack`: the shared services as `compose.yaml` and `compose.local.yaml`, and the command `zigordev-stack`                       |
-| `stack/src`                | The command, and `compose.test.ts`, which holds every service to the container rules                                                      |
-| `stack/observability/`     | The dashboard and alert files that gcx pushes. `pnpm build` writes them, and git ignores them                                             |
-| `observability/src`        | The dashboards and the alert rules as TypeScript, and `build.ts`, which writes those files                                                |
-| `docs/runbooks/`           | One page for each alert, named after the alert                                                                                            |
-| `docs/`                    | The standard docs, and the decision records in `docs/adr/`                                                                                |
-| `.claude/`                 | A copy of the shared rules, skills, hooks and permissions. `toolkit` owns them                                                            |
-| `.github/workflows/ci.yml` | The callers of the pipeline and of the release in `toolkit`, both pinned to one commit of it, and the job that starts the shared services |
-| `test/`                    | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                                                  |
-| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks and zizmor                                                                                 |
-| `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                       |
+| Path                       | What it holds                                                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stack/`                   | `@zigordev/stack`: the shared services as `compose.yaml` and `compose.local.yaml`, and the command `zigordev-stack`                                                                               |
+| `stack/src`                | The command, and `compose.test.ts`, which holds every service to the container rules                                                                                                              |
+| `stack/observability/`     | The dashboard and alert files that gcx pushes. `pnpm build` writes them, and git ignores them                                                                                                     |
+| `observability/src`        | The dashboards and the alert rules as TypeScript, and `build.ts`, which writes those files                                                                                                        |
+| `infra/bootstrap`          | What an empty AWS account needs first: the state bucket and its key, GitHub's sign-in, the plan and apply roles, the budget alarm, the spending check and the GitHub environment `infrastructure` |
+| `infra/bootstrap/tests`    | The stack's tests, which run against stand-ins for AWS and GitHub                                                                                                                                 |
+| `docs/runbooks/`           | One page for each alert, named after the alert                                                                                                                                                    |
+| `docs/`                    | The standard docs, and the decision records in `docs/adr/`                                                                                                                                        |
+| `.claude/`                 | A copy of the shared rules, skills, hooks and permissions. `toolkit` owns them                                                                                                                    |
+| `.github/workflows/ci.yml` | The callers of the pipeline and of the release in `toolkit`, both pinned to one commit of it, and the job that starts the shared services                                                         |
+| `test/`                    | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                                                                                                          |
+| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                       |
+| `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                               |
 
-Two folders arrive in phase 3 of the build plan: `infra/` and `host/`.
+The folder `host/` arrives in step 3.4 of the build plan.
 
 ## Commands
 
@@ -31,11 +33,18 @@ Two folders arrive in phase 3 of the build plan: `infra/` and `host/`.
 - `pnpm exec zigordev check [rule...] [file...]` runs the rules a machine can check, all of them or the ones named.
 - `pnpm exec zigordev sync` copies the shared files from `@zigordev/dev` into this repo.
 - `pnpm exec zigordev release plan` says which public packages npm lacks at the latest tagged version. It changes nothing.
+- `pnpm lint:infra` checks the OpenTofu code's format and runs tflint. `pnpm test:infra` runs the stacks' tests. Both need no AWS account, and `pnpm check` runs them.
 - `pnpm local:up` builds, starts the shared services, waits until each is healthy, and pushes the dashboards and alert rules. `pnpm local:down` stops them and keeps their data. `pnpm local:reset` deletes the data too.
 
 ## Rules of this repo
 
 - Every change to AWS, Cloudflare, GitHub's settings or Grafana Cloud waits for the owner. Nothing there is changed by hand, and a session never runs an apply without a yes.
+- `infra/bootstrap` is applied from the laptop only, with the owner's AWS session and GitHub login, after the owner has said yes to that plan. Record 0005 says why. `docs/cloud-first-deploy.md` holds the commands.
+- Every OpenTofu command against AWS names the profile, `AWS_PROFILE=platform-ops`. The GitHub provider takes the owner's login as `GITHUB_TOKEN="$(gh auth token)"` in the command itself, never from a file.
+- An infrastructure change has a title that starts with `chore(infra)`, so that it releases no package.
+- No account number, email address or other personal value goes into git. The code reads it from AWS, or from Parameter Store, where the owner stores it.
+- A role that GitHub signs in to trusts GitHub's immutable subject, `repo:zigordev@261390829/<repo>@<repo id>:<context>`. `gh api repos/zigordev/<repo>/actions/oidc/customization/sub` prints the prefix. A tested trust that uses the old form fails without an error until a workflow signs in.
+- Each stack sets its lowest OpenTofu version in its own `opentofu.tofu`, never as `required_version` in a `.tf` file, which OpenTofu ignores. Providers are pinned to one exact version, and `.terraform.lock.hcl` holds their hashes for macOS on Apple silicon and for Linux on x86 and Arm.
 - A shared file is never edited here: `.claude/`, `lefthook.yml`, `.commitlintrc.json`, `.markdownlint-cli2.jsonc`, `renovate.json` and the pull request template. Change it in `toolkit`, then run `pnpm exec zigordev sync` here, or `pnpm check` fails.
 - A version lives once, in the `catalog` of `pnpm-workspace.yaml`, as an exact version. `package.json` refers to it with `catalog:`.
 - An entry under `overrides` in `pnpm-workspace.yaml` replaces a dependency of a dependency that has a known flaw, when the package that brings it in offers no fixed version. The entry goes when that package takes a fixed version itself.
