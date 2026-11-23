@@ -17,3 +17,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0005](0005-the-bootstrap-is-applied-from-the-laptop-only.md)                 | The bootstrap is applied from the laptop only                   | 2026-11-23 | accepted |
 | [0006](0006-the-apply-role-is-an-administrator-behind-the-owners-approval.md) | The apply role is an administrator, behind the owner's approval | 2026-11-23 | accepted |
 | [0007](0007-the-aws-account-number-lives-in-a-github-secret.md)               | The AWS account number lives in a GitHub secret                 | 2026-11-23 | accepted |
+| [0008](0008-the-pipeline-changes-github-through-one-github-app.md)            | The pipeline changes GitHub through one GitHub App              | 2026-11-23 | accepted |
