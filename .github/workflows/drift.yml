@@ -31,7 +31,7 @@ jobs:
       - name: Sign in to AWS with the read-only role
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/platform-opentofu-plan
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/platform-opentofu-plan
           role-session-name: platform-drift-${{ github.run_id }}
           aws-region: eu-west-1
           mask-aws-account-id: true
@@ -39,5 +39,5 @@ jobs:
       - name: Plan every stack, and fail when one differs from its code
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: infra/run.sh drift

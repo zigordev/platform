@@ -136,12 +136,12 @@ describe('the release of this repo', () => {
 
 const drift = read('../.github/workflows/drift.yml');
 const signIn =
-  /uses: aws-actions\/configure-aws-credentials@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}role-to-assume: arn:aws:iam::\$\{\{ vars\.AWS_ACCOUNT_ID \}\}:role\/(platform-opentofu-\w+)\n/;
+  /uses: aws-actions\/configure-aws-credentials@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}role-to-assume: arn:aws:iam::\$\{\{ secrets\.AWS_ACCOUNT_ID \}\}:role\/(platform-opentofu-\w+)\n/;
 
 describe('the infrastructure plan', () => {
   const plan = job('infra-plan');
 
-  it('signs in with the read-only role, the account number taken from a variable and hidden in the logs', () => {
+  it('signs in with the read-only role, the account number taken from a secret, which GitHub hides in every log', () => {
     expect(signIn.exec(plan)?.[1]).toBe('platform-opentofu-plan');
     expect(plan).toContain('mask-aws-account-id: true\n');
   });
@@ -198,5 +198,14 @@ describe('the drift check', () => {
     expect(drift).toContain('runs-on: ubuntu-26.04\n');
     expect(drift).toContain('\npermissions: {}\n');
     expect(drift).toContain('    permissions:\n      contents: read\n      id-token: write\n');
+  });
+});
+
+describe('the account number', () => {
+  it('is read from a secret everywhere, never from a variable, because GitHub prints a variable in public logs', () => {
+    for (const workflow of [caller, drift]) {
+      expect(workflow).not.toContain('vars.AWS_ACCOUNT_ID');
+      expect(workflow).toMatch(/arn:aws:iam::\$\{\{ secrets\.AWS_ACCOUNT_ID \}\}:role\//);
+    }
   });
 });

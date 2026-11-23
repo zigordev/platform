@@ -46,7 +46,7 @@ The folder `host/` arrives in step 3.4 of the build plan.
 - An infrastructure change has a title that starts with `chore(infra)`, so that it releases no package.
 - The pipeline plans every stack on every pull request with the read-only role, and applies a changed stack only after the owner approves the run in the environment `infrastructure`. A session never approves it, and never starts the drift check by hand without the owner's yes.
 - A new stack is a folder in `infra/` with a `providers.tf`, its own `opentofu.tofu`, its state under its own key in the state bucket, and tests in its own `tests/`. `infra/run.sh` finds it by itself, and `pnpm lint:infra` and `pnpm test:infra` must cover it.
-- The pipeline builds each role's name from the variable `AWS_ACCOUNT_ID`, which the owner sets (record 0007), and every sign-in hides the number.
+- The pipeline builds each role's name from the secret `AWS_ACCOUNT_ID`, which the owner sets (record 0007). Never from a variable: GitHub prints a variable's value in the public logs.
 - No account number, email address or other personal value goes into git. The code reads it from AWS, or from Parameter Store, where the owner stores it.
 - A role that GitHub signs in to trusts GitHub's immutable subject, `repo:zigordev@261390829/<repo>@<repo id>:<context>`. `gh api repos/zigordev/<repo>/actions/oidc/customization/sub` prints the prefix. A tested trust that uses the old form fails without an error until a workflow signs in.
 - Each stack sets its lowest OpenTofu version in its own `opentofu.tofu`, never as `required_version` in a `.tf` file, which OpenTofu ignores. Providers are pinned to one exact version, and `.terraform.lock.hcl` holds their hashes for macOS on Apple silicon and for Linux on x86 and Arm.
