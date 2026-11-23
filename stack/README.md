@@ -50,12 +50,13 @@ Without the Docker proxy, the ingress and the agent would hold Docker's socket i
 
 The five containers form one Compose project named `platform`, whichever folder the files are started from. A product starts the same project from its own copy of this package, so a second start changes nothing, and two products share one set of services.
 
-| Name              | What it is                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------ |
-| `zigordev`        | The network that every app joins. On it, the services answer to their own names                  |
-| `alloy:4318`      | Where an app sends its traces and metrics, over OTLP on HTTP. Port 4317 takes the same over gRPC |
-| `mailpit:1025`    | Where an app sends its mail on the laptop, over SMTP                                             |
-| `zigordev-docker` | A second network with no way out. Only the Docker proxy, the ingress and the agent are on it     |
+| Name              | What it is                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zigordev`        | The network that every app joins. On it, the services answer to their own names                                                                      |
+| `alloy:4318`      | Where an app sends its traces and metrics, over OTLP on HTTP. Port 4317 takes the same over gRPC                                                     |
+| `127.0.0.1:4318`  | The same port, published on the laptop itself, for an app that runs as a process outside a container, such as one started with `pnpm dev`. HTTP only |
+| `mailpit:1025`    | Where an app sends its mail on the laptop, over SMTP                                                                                                 |
+| `zigordev-docker` | A second network with no way out. Only the Docker proxy, the ingress and the agent are on it                                                         |
 
 Nothing in the files points at a file on disk. That is on purpose: Compose recreates a container when the path of a mounted file changes, and each product has this package in a folder of its own. So the ingress and the proxy take their settings as variables and flags, and the agent's config travels inside `compose.yaml`, as the variable `ALLOY_CONFIG`. One line of shell writes it to a file in memory before Alloy starts, and Alloy then replaces that shell. A change to the config therefore recreates the agent and nothing else.
 
@@ -96,14 +97,14 @@ A new app needs no entry anywhere. It appears in the list of the App dashboard w
 
 ### Each container is boxed in
 
-| Rule                                                                            | Why                                                            |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| An exact image version                                                          | The same bytes on every laptop, and Renovate proposes the next |
-| A health check                                                                  | `up` can wait for it, and the ingress can trust it             |
-| A memory limit and a CPU limit                                                  | One service cannot starve the others                           |
-| An init process, no new privileges, no capabilities, at most 30 seconds to stop | A broken service stays inside its box and stops cleanly        |
-| A user that is not root, and a read-only file system                            | A flaw in the service cannot change the service                |
-| No published port, except port 80 of the ingress, on this laptop itself         | Nothing is reachable from the network the laptop is on         |
+| Rule                                                                                                    | Why                                                            |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| An exact image version                                                                                  | The same bytes on every laptop, and Renovate proposes the next |
+| A health check                                                                                          | `up` can wait for it, and the ingress can trust it             |
+| A memory limit and a CPU limit                                                                          | One service cannot starve the others                           |
+| An init process, no new privileges, no capabilities, at most 30 seconds to stop                         | A broken service stays inside its box and stops cleanly        |
+| A user that is not root, and a read-only file system                                                    | A flaw in the service cannot change the service                |
+| No published port, except port 80 of the ingress and port 4318 of the agent, both on this laptop itself | Nothing is reachable from the network the laptop is on         |
 
 `src/compose.test.ts` holds every service to these rules, one by one, and the job `gcx` to all but the health check, which a job that ends does not need. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
 
@@ -135,14 +136,15 @@ Traefik warns once at each start that it "can reject some encoded characters in 
 
 Production is built in phase 3. It will start `compose.yaml` with a `compose.production.yaml` of its own.
 
-| Thing                        | On the laptop                                                   | In production                                       |
-| ---------------------------- | --------------------------------------------------------------- | --------------------------------------------------- |
-| The three shared services    | From `compose.yaml`                                             | The same file                                       |
-| How a request arrives        | Port 80 on the laptop itself, over IPv4 and IPv6                | Through Cloudflare's tunnel, with no published port |
-| Where the agent sends        | To `lgtm`, with a made-up name and password that nothing checks | To Grafana Cloud                                    |
-| Grafana and the mail catcher | `lgtm` and `mailpit`                                            | Grafana Cloud and Amazon SES                        |
-| The ingress's own pages      | At `traefik.localhost`                                          | Off                                                 |
-| The proxy's group            | 0, which owns the socket on Docker Desktop                      | The group that owns the socket on the host          |
+| Thing                                  | On the laptop                                                        | In production                                               |
+| -------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
+| The three shared services              | From `compose.yaml`                                                  | The same file                                               |
+| How a request arrives                  | Port 80 on the laptop itself, over IPv4 and IPv6                     | Through Cloudflare's tunnel, with no published port         |
+| How an app outside a container reports | To `127.0.0.1:4318`, the agent's port published on the laptop itself | Every app runs in a container, so the port is not published |
+| Where the agent sends                  | To `lgtm`, with a made-up name and password that nothing checks      | To Grafana Cloud                                            |
+| Grafana and the mail catcher           | `lgtm` and `mailpit`                                                 | Grafana Cloud and Amazon SES                                |
+| The ingress's own pages                | At `traefik.localhost`                                               | Off                                                         |
+| The proxy's group                      | 0, which owns the socket on Docker Desktop                           | The group that owns the socket on the host                  |
 
 ## How to use it, with one worked example
 
@@ -227,6 +229,7 @@ Every product starts the same project, named `platform`. Two products that hold 
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Cannot connect to the Docker daemon`                                           | Docker is not running                                                                                                                                                | Start Docker Desktop                                                                                                                                  |
 | `Bind for 127.0.0.1:80 failed: port is already allocated`                       | Another program on the laptop holds port 80                                                                                                                          | Find it with `lsof -nP -iTCP:80 -sTCP:LISTEN`, and stop it                                                                                            |
+| `Bind for 127.0.0.1:4318 failed: port is already allocated`                     | Another program on the laptop holds port 4318, often another OpenTelemetry collector                                                                                 | Find it with `lsof -nP -iTCP:4318 -sTCP:LISTEN`, and stop it                                                                                          |
 | `local:up` ends with "not every shared service became healthy"                  | One container did not pass its health check in 5 minutes                                                                                                             | The lines above name it. `docker logs platform-<service>-1` shows why                                                                                 |
 | `zigordev-stack up` says "the dashboard files are missing"                      | The files in `stack/observability/` are built, not committed                                                                                                         | `pnpm build`, which `pnpm local:up` does by itself                                                                                                    |
 | `local:up` says the dashboards and the alert rules could not be pushed          | gcx could not reach Grafana, or Grafana refused a file                                                                                                               | The lines above name the file and the reason. `pnpm exec vitest run observability` checks the files' shape                                            |

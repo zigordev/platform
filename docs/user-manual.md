@@ -37,6 +37,8 @@ With the shared services running, an app is served when its compose file does fo
 
 Its log lines need nothing: the agent reads them from Docker and names them by the app's service name.
 
+An app that runs as a process on the laptop, outside a container, as with `pnpm dev`, sends its traces and metrics to `http://127.0.0.1:4318` instead. The agent publishes that one port on the laptop itself, for HTTP only.
+
 [The package's own page](../stack/README.md) shows a whole example, explains each service, and lists what to check when an app is not served.
 
 ## The dashboard and the alerts

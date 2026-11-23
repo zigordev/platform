@@ -98,11 +98,18 @@ describe.each(services)('%s', (name, service) => {
   }
 
   if (name === 'traefik') {
-    it('is the only service with a published port: port 80, on this laptop itself and nowhere else', () => {
+    it('publishes port 80, on this laptop itself and nowhere else', () => {
       expect(service.ports).toEqual([
         expect.objectContaining({ host_ip: '127.0.0.1', published: '80', target: 8080 }),
         expect.objectContaining({ host_ip: '::1', published: '80', target: 8080 }),
       ]);
+    });
+  } else if (name === 'alloy') {
+    it('publishes only its OTLP port for HTTP, on this laptop itself, for an app that runs outside a container', () => {
+      expect(service.ports).toEqual([
+        expect.objectContaining({ host_ip: '127.0.0.1', published: '4318', target: 4318 }),
+      ]);
+      expect(everywhere.services.alloy?.ports).toBeUndefined();
     });
   } else {
     it('publishes no port', () => {

@@ -43,7 +43,7 @@ One dependency is our own. `@zigordev/dev` holds the developer setup that every 
 
 In Grafana, the folder `zigordev` under Dashboards holds two dashboards: App, for one app picked from a list, and Platform, for the machine and the ingress. Under Alerting there are four rules, which on a laptop notify nobody.
 
-A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself and are not reachable from the network it is on.
+A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself, and the telemetry agent also on port 4318, for an app that runs as a process outside a container. Neither port is reachable from the network the laptop is on.
 
 `pnpm local:down` stops them and keeps their data. `pnpm local:reset` deletes the data too and starts again. [The package's own page](../stack/README.md) explains each service, and what to do when one does not start.
 

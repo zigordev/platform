@@ -14,6 +14,8 @@ services:
       traefik.http.routers.traefik.service: api@internal
 
   alloy:
+    ports:
+      - 127.0.0.1:4318:4318
     environment:
       OTLP_DESTINATION: http://lgtm:4318
       OTLP_USERNAME: local

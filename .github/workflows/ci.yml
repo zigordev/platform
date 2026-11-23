@@ -51,6 +51,24 @@ jobs:
             echo "http://$address answers"
           done
 
+      - name: Send a trace from the machine itself, as an app outside a container does
+        run: |
+          trace_id="$(openssl rand -hex 16)"
+          span_id="$(openssl rand -hex 8)"
+          now="$(date +%s%N)"
+          printf '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"pipeline-probe"}}]},"scopeSpans":[{"spans":[{"traceId":"%s","spanId":"%s","name":"probe","kind":1,"startTimeUnixNano":"%s","endTimeUnixNano":"%s"}]}]}]}' "$trace_id" "$span_id" "$now" "$now" > trace.json
+          curl --fail --silent --show-error --output /dev/null --max-time 10 --header 'Content-Type: application/json' --data @trace.json http://127.0.0.1:4318/v1/traces
+          echo "http://127.0.0.1:4318 took the trace $trace_id"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null --max-time 5 "http://grafana.localhost/api/datasources/proxy/uid/tempo/api/traces/$trace_id"; then
+              echo "Grafana shows the trace after $attempt tries"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Grafana did not show the trace within a minute"
+          exit 1
+
       - name: Show the containers when a step failed
         if: failure()
         working-directory: stack
