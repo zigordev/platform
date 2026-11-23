@@ -133,7 +133,7 @@ describe('the Docker proxy', () => {
   it('runs in the group that owns the socket: 0 on Docker Desktop, and the one it is told elsewhere', () => {
     expect(proxy?.user).toBe('65534:0');
     const local = readFileSync(new URL('../compose.local.yaml', import.meta.url), 'utf8');
-    expect(local).toContain('    user: "65534:${DOCKER_SOCKET_GROUP:-0}"\n');
+    expect(local).toMatch(/^ {4}user: "65534:\$\{DOCKER_SOCKET_GROUP:-0\}"$/m);
   });
 
   it('sits on a network of its own, which has no way out', () => {
