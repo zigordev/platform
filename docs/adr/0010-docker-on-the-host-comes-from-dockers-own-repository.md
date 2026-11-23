@@ -1,6 +1,6 @@
 # 0010. Docker on the host comes from Docker's own repository
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-23
 - Supersedes: none
 
@@ -14,6 +14,8 @@ The host runs every container with Docker and Docker Compose, the same tools as 
 | Docker's repository for Ubuntu   | `docker-ce` 29.9.3, Compose plugin 5.8.0  | Docker                                                                          |
 
 The laptop runs Docker 29.9.2. A new major version of Docker can drop old parts of its API, which the ingress and the telemetry agent read. The core rules say that a new major version waits a month and arrives as its own task.
+
+On 2026-11-23 the owner accepted this record by answering "Merge" to the question whether to merge platform#26, which accepts records 0009 to 0011.
 
 ## Decision
 

@@ -1,6 +1,6 @@
 # 0009. The host is built at its first boot, and rebuilt on a change
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-23
 - Supersedes: none
 
@@ -9,6 +9,8 @@
 Step 3.4 of the build plan adds the one server that runs every product: a t4g.small on Ubuntu 26.04 LTS. The plan asks that it is built from code and holds nothing made by hand, so that it can be thrown away and rebuilt within 1 hour.
 
 cloud-init, which every Ubuntu image runs at boot, applies the server's user data once, at the first boot of an instance. A later change to the user data does nothing on a running server unless the server is replaced. Before the restart, the old host's user data wrote a cleanup job into a folder that did not exist yet, so the job never ran and the disk filled to 94% on 2026-09-21.
+
+On 2026-11-23 the owner accepted this record by answering "Merge" to the question whether to merge platform#26, which accepts records 0009 to 0011.
 
 ## Decision
 

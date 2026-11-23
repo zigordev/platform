@@ -1,6 +1,6 @@
 # 0011. The only way into the host is AWS Systems Manager
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-23
 - Supersedes: none
 
@@ -9,6 +9,8 @@
 The plan gives the host no inbound port: visitors arrive through the Cloudflare Tunnel, and a person arrives through AWS Systems Manager. The agent of Systems Manager runs on the host and calls out to AWS, so it needs no open port, and AWS checks every session against the owner's sign-in.
 
 The agent needs an instance role. AWS's managed policy for it, `AmazonSSMManagedInstanceCore`, also allows `ssm:GetParameter` on every parameter. With it, any process on the host as root could read every secret in Parameter Store, the GitHub App's key of [record 0008](0008-the-pipeline-changes-github-through-one-github-app.md) among them.
+
+On 2026-11-23 the owner accepted this record by answering "Merge" to the question whether to merge platform#26, which accepts records 0009 to 0011.
 
 ## Decision
 
