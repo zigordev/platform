@@ -1,7 +1,6 @@
 {
   "name": "@zigordev/stack",
   "version": "0.0.0",
-  "private": true,
   "description": "The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, a local Grafana and a mail catcher, as compose files with one command that starts them",
   "license": "UNLICENSED",
   "type": "module",

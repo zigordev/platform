@@ -146,9 +146,37 @@ describe('zigordev-stack with anything else', () => {
 
 describe('the package', () => {
   const manifest = JSON.parse(readFileSync(`${folder}package.json`, 'utf8')) as {
+    name: string;
+    version: string;
+    private?: boolean;
     files: string[];
     bin: Record<string, string>;
+    dependencies?: Record<string, string>;
+    publishConfig: Record<string, string>;
+    repository: Record<string, string>;
   };
+
+  it('is public, so the release packs it and hands it to npm', () => {
+    expect(manifest.name).toBe('@zigordev/stack');
+    expect(manifest.private).toBeUndefined();
+    expect(manifest.publishConfig).toEqual({ access: 'public' });
+  });
+
+  it('names this repo exactly, because npm compares the name with the proof of origin', () => {
+    expect(manifest.repository).toEqual({
+      type: 'git',
+      url: 'git+https://github.com/zigordev/platform.git',
+      directory: 'stack',
+    });
+  });
+
+  it('keeps version 0.0.0 in git, because the release writes the tagged version when it packs', () => {
+    expect(manifest.version).toBe('0.0.0');
+  });
+
+  it('has no dependency of its own, so a product installs this one package and nothing with it', () => {
+    expect(manifest.dependencies).toBeUndefined();
+  });
 
   it('ships the command, its compiled code, every compose file the command names, and the dashboard files', () => {
     expect(manifest.files).toEqual(['bin', 'dist', ...files, resources]);

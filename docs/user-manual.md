@@ -1,13 +1,13 @@
 # Use platform
 
-`platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-22, because the platform is still being built.
+`platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-23, because the platform is still being built.
 
-| A user takes                         | Who       | From                 | Exists today                                                 |
-| ------------------------------------ | --------- | -------------------- | ------------------------------------------------------------ |
-| The shared services on the laptop    | A product | `stack/`             | Yes, in this repo. As the package `@zigordev/stack`, not yet |
-| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop. Four of the ten alerts                   |
-| A place to run in production         | A product | `infra/` and `host/` | Not yet. Phase 3                                             |
-| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those four                                          |
+| A user takes                         | Who       | From                 | Exists today                                           |
+| ------------------------------------ | --------- | -------------------- | ------------------------------------------------------ |
+| The shared services on the laptop    | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack` |
+| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop. Four of the ten alerts             |
+| A place to run in production         | A product | `infra/` and `host/` | Not yet. Phase 3                                       |
+| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those four                                    |
 
 ## What a product does not have to do
 
@@ -59,7 +59,7 @@ An app adds panels and alerts for what only it knows, such as emails delivered p
 
 In this repo, `pnpm local:up`, `pnpm local:down` and `pnpm local:reset`. [Run platform on a clean laptop](local-first-start.md) walks through the first start.
 
-A product will not need this repo for that. It will install `@zigordev/stack` and start the same services with `zigordev-stack up`, once the package is published.
+A product does not need this repo for that. It installs `@zigordev/stack` from npm as a dev dependency, and `zigordev-stack up`, `zigordev-stack down` and `zigordev-stack reset` do the same there. [The package's own page](../stack/README.md) shows how.
 
 ## Finding out how something is meant to work
 
