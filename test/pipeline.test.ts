@@ -41,6 +41,11 @@ describe('the pipeline of this repo', () => {
     expect(gate).toContain('test "$STACK" = "success"\n');
   });
 
+  it('names the Ubuntu of each job it runs itself, so that only a pull request moves it', () => {
+    const machines = [...caller.matchAll(/^ {4}runs-on: (.+)$/gm)].map((match) => match[1]);
+    expect(machines).toEqual(['ubuntu-26.04-arm', 'ubuntu-26.04']);
+  });
+
   it('runs on every pull request and on every merge to main', () => {
     expect(caller).toContain('  pull_request:\n');
     expect(caller).toContain('  push:\n    branches: [main]\n');
@@ -51,7 +56,7 @@ describe('the job that starts the shared services', () => {
   const stack = job('stack');
 
   it('runs on the kind of machine the host is, and may only read the repo', () => {
-    expect(stack).toContain('runs-on: ubuntu-24.04-arm\n');
+    expect(stack).toContain('runs-on: ubuntu-26.04-arm\n');
     expect(stack).toContain('    permissions:\n      contents: read\n');
     expect(stack).not.toContain('write');
   });
