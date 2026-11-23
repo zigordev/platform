@@ -1,0 +1,8 @@
+[Unit]
+Description=Writes each container's memory and its limit for the telemetry agent
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/platform-container-memory

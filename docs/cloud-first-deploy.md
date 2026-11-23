@@ -1,15 +1,16 @@
 # How platform reaches production
 
-Nothing in this repo reaches production yet. Production is built in phase 3, and this page grows with it. Today it says what leaves this repo and what will, how a change reaches `main`, how the one package is released, and which settings on GitHub protect that path.
+Production is built in phase 3, and this page grows with it. Today it says what leaves this repo and what will, how a change reaches `main`, how the one package is released, which settings on GitHub protect that path, and how the one server is built and reached.
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                            | State on 2026-11-23                                                                         |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version  |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | The foundation of the AWS account is written, and waits for its first apply from the laptop |
-| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                                            |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                            |
+| What                                                 | How it will travel                                                                            | State on 2026-11-23                                                                        |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Running since 2026-11-23: the bootstrap, the plan and the apply, and GitHub's settings     |
+| The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                     | Written in step 3.4. It exists once the owner has approved its first apply                 |
+| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Steps 3.5 to 3.7                                                                  |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                           |
 
 ## The path of a change
 
@@ -148,6 +149,79 @@ The pipeline finds the roles by their full name, which holds the account number.
 
 The stack `infra/github` signs in to GitHub as a GitHub App that the owner made for it, because the token GitHub gives each workflow cannot even read most settings. The app holds three rights, each read and write: Administration, Issues and Variables. Its private key is the SecureString `/platform/GITHUB_APP_PRIVATE_KEY` in Parameter Store, which only the owner stores, and each run gets a token that lasts one hour. [Record 0008](adr/0008-the-pipeline-changes-github-through-one-github-app.md) says why.
 
+## The host
+
+One server runs every product: the host. It is step 3.4 of the build plan, the stack `infra/host`, and nothing on it is made by hand.
+
+### What it is
+
+| Part               | What it is                                                                                                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The network        | Its own network, `platform` (10.20.0.0/16), with one subnet in `eu-west-1a` and a way out to the internet. The network's default security group holds no rule              |
+| The security group | `platform-host`. It lets nothing in, and lets the host reach out to anywhere, for updates, images and AWS's own services                                                   |
+| The server         | `platform-host`, a t4g.small: 2 Arm processors and 2 GiB of memory. Its processor credits are capped, so a runaway process slows down instead of costing money             |
+| The image          | Canonical's Ubuntu 26.04 LTS for Arm, the newest one when the host is built                                                                                                |
+| The system disk    | 20 GB of encrypted gp3. It holds Ubuntu, Docker and the images, and goes with the server                                                                                   |
+| The data disk      | `platform-data`: 10 GB of encrypted gp3, mounted at `/srv/data`. Every Docker volume lives on it. It outlives the server, and the code refuses to delete it                |
+| The role           | `platform-host`. It lets AWS Systems Manager reach the host, and reads no parameter. [Record 0011](adr/0011-the-only-way-into-the-host-is-aws-systems-manager.md) says why |
+
+### What runs on it
+
+Everything below comes from `host/root`, where each file sits at its path on the host. At the first boot, cloud-init writes them all and runs `/usr/local/sbin/platform-setup` once.
+
+| What                      | How                                                                                                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Docker and Docker Compose | From Docker's own repository, held to Docker 29, containerd 2 and Compose 5. Logs rotate at 10 MB, five files per container, and containers keep running while Docker updates itself. [Record 0010](adr/0010-docker-on-the-host-comes-from-dockers-own-repository.md) says why |
+| Automatic updates         | Every day, Ubuntu's security updates and Docker's updates install themselves. When one needs a restart, the host restarts at 03:00 UTC. [Record 0012](adr/0012-the-host-restarts-itself-at-night-when-an-update-needs-it.md) says why                                          |
+| The data disk             | `platform-data-disk.service` waits up to 15 minutes for the disk. A new, empty disk gets an ext4 file system labelled `platform-data`. A disk with anything else on it is never formatted. Docker does not start until the disk is mounted                                     |
+| The Docker cleanup        | `platform-docker-cleanup.timer`, every day at 04:30 UTC: it removes stopped containers, unused networks and unused images older than 7 days. It never touches a volume                                                                                                         |
+| Each container's memory   | `platform-container-memory.timer`, every minute: it writes each container's memory and its limit to `/var/lib/platform/metrics/containers.prom`, with the labels the logs carry. Alloy reads that file once it runs on the host                                                |
+| The way in                | AWS Systems Manager only. The SSH server is switched off, and there is no key                                                                                                                                                                                                  |
+
+### How to open a shell
+
+Two ways, both through your AWS sign-in:
+
+- **In the browser:** the AWS console in Ireland, then EC2, then Instances, then `platform-host`, then Connect, then the tab Session Manager, then Connect.
+- **From the laptop**, with AWS's Session Manager plugin installed (`brew install --cask session-manager-plugin`):
+
+```bash
+aws sso login --profile platform-ops
+aws ssm start-session --profile platform-ops --region eu-west-1 --target "$(aws ec2 describe-instances --profile platform-ops --region eu-west-1 --filters Name=tag:Name,Values=platform-host Name=instance-state-name,Values=running --query 'Reservations[0].Instances[0].InstanceId' --output text)"
+```
+
+The shell runs as `ssm-user`, which may use `sudo`. These commands show the host's state:
+
+| Command                                          | What it shows                                             |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| `cloud-init status --long`                       | Whether the first boot finished, and the error if not     |
+| `sudo tail -n 50 /var/log/cloud-init-output.log` | What the setup script printed                             |
+| `findmnt /srv/data /var/lib/docker/volumes`      | That the data disk is mounted, and Docker's volumes on it |
+| `systemctl list-timers 'platform-*'`             | When each timer last ran and runs next                    |
+| `cat /var/lib/platform/metrics/containers.prom`  | Each container's memory and limit, a minute old at most   |
+| `sudo unattended-upgrade --dry-run`              | Which updates are waiting                                 |
+| `cat /var/run/reboot-required 2> /dev/null`      | Whether an update waits for the night's restart           |
+
+### How a change reaches it
+
+A change to any file under `host/root`, or to the user data, rebuilds the host. The plan says that the instance "must be replaced". After the owner's approval, the old host stops, which stops every container cleanly, the data disk moves to the new host, and the new host runs its first boot again, which takes a few minutes. [Record 0009](adr/0009-the-host-is-built-at-its-first-boot-and-rebuilt-on-a-change.md) says why.
+
+A newer Ubuntu image does not rebuild the host, because the automatic updates keep it current. The next rebuild takes the newest image.
+
+### What the host costs
+
+Measured against AWS's own price list for Ireland on 2026-11-23, for a month of 730 hours:
+
+| Part               | Price                                                                                                                                | A month                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| The server         | $0.0184 an hour. AWS's free trial covers 750 hours of t4g.small a month until 2026-12-31                                             | $13.43, and $0 until 2026-12-31 |
+| The system disk    | 20 GB at $0.088 per GB a month                                                                                                       | $1.76                           |
+| The data disk      | 10 GB at $0.088 per GB a month                                                                                                       | $0.88                           |
+| The public address | $0.005 an hour. The host needs one to reach GitHub, its image registry and Systems Manager, which have no IPv6 address on 2026-11-23 | $3.65                           |
+| Systems Manager    | AWS: "No additional charges for usage on Amazon EC2 instances"                                                                       | $0                              |
+
+So the host costs $6.29 a month until 2026-12-31, and $19.72 a month from 2027-01-01, unless AWS extends its free trial again. The trial does not cover surplus processor credits, which the capped credits rule out.
+
 ## The settings on GitHub
 
 They were set by hand when the repo was created, on 2026-11-22, as a copy of the settings of `toolkit`. Since step 3.3 of the build plan they are code in `infra/github`, for `toolkit` and `platform` alike, and a change reaches them like any other stack: a plan in the pull request, an apply after the owner's approval. The table names the few that stay outside that stack.
@@ -186,6 +260,10 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | The Drift run failed                               | Something in AWS, GitHub or another provider was changed outside the code. The summary names the stack and the change. Undo it, or write it into the code                                                                                                                                                                             |
 | The app's key has to change                        | The owner generates a new key on the app's page, stores it under the same name with `aws ssm put-parameter --overwrite`, deletes the downloaded file, then deletes the old key on the app's page                                                                                                                                      |
 | A new repo                                         | Creating it waits for the owner. Then it is one more entry in `local.repos` in `infra/github/locals.tf`, and the app reaches it, because it is installed on all repos                                                                                                                                                                 |
+| The host does not show in Systems Manager          | Its first boot failed before the agent started, or the role is missing. Read the boot's output without a shell: `aws ec2 get-console-output --profile platform-ops --region eu-west-1 --latest --output text --instance-id <id>`. A host that cannot be reached is rebuilt: a pull request that changes `host/root` replaces it       |
+| Docker does not start on the host                  | The data disk is missing, or `platform-data-disk.service` refused to touch it. `systemctl status platform-data-disk.service` says which. A disk that holds unknown data is never formatted: find out what is on it before anything else                                                                                               |
+| The data disk is filling up                        | Raise `local.data_disk.size_gb` in `infra/host/locals.tf` through a pull request. After the apply, run `sudo resize2fs /dev/disk/by-label/platform-data` in a shell. The disk grows while the host runs                                                                                                                               |
+| Docker has a new major version                     | Wait a month after its release, then move the pin in `host/root/etc/apt/preferences.d/docker` through a pull request, which rebuilds the host                                                                                                                                                                                         |
 | A change has to be undone                          | Revert it through a pull request                                                                                                                                                                                                                                                                                                      |
 
 ## The one override
