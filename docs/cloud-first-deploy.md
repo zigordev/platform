@@ -34,6 +34,8 @@ The pipeline is not written here. `.github/workflows/ci.yml` calls the one that 
 | Shared services | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers | Every pull request and every merge |
 | `check`         | Every job above passed                                                                                                         | Every pull request and every merge |
 
+Every job names the Ubuntu it runs on, exactly: the gate runs on Ubuntu 26.04, and Shared services on Ubuntu 26.04 for arm64, the kind of machine the server will be. No job uses GitHub's `ubuntu-latest`, which GitHub moves to a new version by itself. A new Ubuntu therefore arrives as a pull request from Renovate, and as a major version it waits a month and for the owner. The jobs that `toolkit` holds follow the same rule.
+
 A pull request opens as a draft. Marking it ready means: merge it when `check` is green. Nobody merges by hand. A change to infrastructure will be the exception: its plan waits for the owner's approval before anything is applied.
 
 Renovate proposes each new version of the pipeline, as it does for any pinned action.
