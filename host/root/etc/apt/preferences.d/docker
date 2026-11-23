@@ -1,0 +1,11 @@
+Package: docker-ce docker-ce-cli docker-ce-rootless-extras
+Pin: version 5:29.*
+Pin-Priority: 990
+
+Package: containerd.io
+Pin: version 2.*
+Pin-Priority: 990
+
+Package: docker-compose-plugin
+Pin: version 5.*
+Pin-Priority: 990

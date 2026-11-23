@@ -1,0 +1,16 @@
+[Unit]
+Description=Docker's volumes, kept on the data disk
+DefaultDependencies=no
+Requires=srv-data.mount
+After=srv-data.mount
+Conflicts=umount.target
+Before=umount.target
+
+[Mount]
+What=/srv/data/docker-volumes
+Where=/var/lib/docker/volumes
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target

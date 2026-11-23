@@ -14,6 +14,9 @@ The infrastructure and the shared services of every zigordev product: the ingres
 | `infra/bootstrap/tests`       | The stack's tests, which run against stand-ins for AWS and GitHub                                                                                                                                                         |
 | `infra/github`                | GitHub's settings of every repo: merging, the ruleset on `main`, the environment `release`, the security settings, the workflow token and the label `destructive-migration`. It signs in as the GitHub App of record 0008 |
 | `infra/github/tests`          | The stack's tests, which run against stand-ins for AWS and GitHub                                                                                                                                                         |
+| `infra/host`                  | The host: its own network with no inbound rule, its role, the t4g.small on Ubuntu 26.04, the data disk, and the user data built from `host/root`                                                                          |
+| `infra/host/tests`            | The stack's tests, which run as plans against a stand-in for AWS                                                                                                                                                          |
+| `host/root`                   | The files the host gets at its first boot, each at the same path on the host: the setup script, Docker's settings, the automatic updates, the data disk's units and the timers                                            |
 | `infra/run.sh`                | Plans, checks for drift or applies every stack in `infra/`, the same way in the pipeline and in the drift check. It never applies the bootstrap                                                                           |
 | `docs/runbooks/`              | One page for each alert, named after the alert                                                                                                                                                                            |
 | `docs/`                       | The standard docs, and the decision records in `docs/adr/`                                                                                                                                                                |
@@ -23,8 +26,6 @@ The infrastructure and the shared services of every zigordev product: the ingres
 | `test/`                       | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                                                                                                                                  |
 | `mise.toml`                   | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                                               |
 | `pnpm-workspace.yaml`         | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                                                       |
-
-The folder `host/` arrives in step 3.4 of the build plan.
 
 ## Commands
 
@@ -50,6 +51,11 @@ The folder `host/` arrives in step 3.4 of the build plan.
 - A new stack is a folder in `infra/` with a `providers.tf`, its own `opentofu.tofu`, its state under its own key in the state bucket, and tests in its own `tests/`. `infra/run.sh` finds it by itself, and `pnpm lint:infra` and `pnpm test:infra` must cover it.
 - `infra/github` signs in as the GitHub App of record 0008, whose key the owner keeps in Parameter Store. A new repo is one entry in its `local.repos`, once the owner has said yes to the repo. It never manages the environment `infrastructure`, which the bootstrap owns, nor the subject of GitHub's sign-in to AWS, which provider 6.13.0 cannot express.
 - The pipeline builds each role's name from the secret `AWS_ACCOUNT_ID`, which the owner sets (record 0007). Never from a variable: GitHub prints a variable's value in the public logs.
+- A file under `host/root` lands at the same path on the host, through the user data. A change to one of them rebuilds the host: the plan says the instance must be replaced, and the data disk stays. Record 0009 says why.
+- The data disk is never destroyed by code. `prevent_destroy` guards it, which is also why the host's tests run as plans only.
+- The host's role reads no parameter until a step needs one, and then only that product's own path. AWS's managed policy `AmazonSSMManagedInstanceCore` is never attached, because it reads every parameter, the GitHub App's key included.
+- Docker on the host comes from Docker's own repository, held to one major version in `host/root/etc/apt/preferences.d/docker`. A new major version is its own pull request, a month after its release. Record 0010 says why.
+- A script of the host is bash, with a test in `test/` that runs it with stand-ins on `PATH`. It runs on Ubuntu's bash 5 on the host and on the laptop's bash 3.2 in its test, so it uses neither associative arrays nor `mapfile`.
 - No account number, email address or other personal value goes into git. The code reads it from AWS, or from Parameter Store, where the owner stores it.
 - A role that GitHub signs in to trusts GitHub's immutable subject, `repo:zigordev@261390829/<repo>@<repo id>:<context>`. `gh api repos/zigordev/<repo>/actions/oidc/customization/sub` prints the prefix. A tested trust that uses the old form fails without an error until a workflow signs in.
 - Each stack sets its lowest OpenTofu version in its own `opentofu.tofu`, never as `required_version` in a `.tf` file, which OpenTofu ignores. Providers are pinned to one exact version, and `.terraform.lock.hcl` holds their hashes for macOS on Apple silicon and for Linux on x86 and Arm.

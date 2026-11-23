@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt_get() {
+  apt-get -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confold "$@"
+}
+
+if ! snap list amazon-ssm-agent > /dev/null 2>&1; then
+  snap install amazon-ssm-agent --classic
+fi
+systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service
+
+systemctl mask ssh.service ssh.socket
+systemctl stop ssh.socket ssh.service
+
+systemctl daemon-reload
+apt_get update
+apt_get --yes dist-upgrade
+apt_get --yes install --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+systemctl enable --now docker.service
+systemctl enable --now platform-docker-cleanup.timer platform-container-memory.timer

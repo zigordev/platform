@@ -1,0 +1,12 @@
+[Unit]
+Description=Waits for the data disk, and gives it a file system when it is new
+DefaultDependencies=no
+After=systemd-udevd.service local-fs.target
+Before=srv-data.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/platform/host.env
+ExecStart=/usr/local/sbin/platform-data-disk
+TimeoutStartSec=20min

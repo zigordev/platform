@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+device="${PLATFORM_DATA_DEVICE:?PLATFORM_DATA_DEVICE must name the data disk}"
+wait_seconds="${PLATFORM_DATA_WAIT_SECONDS:-900}"
+poll_seconds="${PLATFORM_DATA_POLL_SECONDS:-5}"
+label="platform-data"
+
+waited=0
+until [ -e "$device" ]; do
+  if [ "$waited" -ge "$wait_seconds" ]; then
+    echo "The data disk $device did not appear within $wait_seconds seconds" >&2
+    exit 1
+  fi
+  sleep "$poll_seconds"
+  waited=$((waited + poll_seconds))
+done
+
+set +e
+blkid -p "$device" > /dev/null 2>&1
+probe=$?
+set -e
+
+if [ "$probe" -eq 0 ]; then
+  echo "The data disk $device has a file system already, so it is used as it is"
+  exit 0
+fi
+
+if [ "$probe" -ne 2 ]; then
+  echo "blkid could not read the data disk $device and ended with $probe, so the disk is left untouched" >&2
+  exit 1
+fi
+
+if ! cmp -s -n 1048576 "$device" /dev/zero; then
+  echo "The data disk $device holds data that blkid does not recognise, so the disk is left untouched" >&2
+  exit 1
+fi
+
+echo "The data disk $device is new, so it gets an ext4 file system labelled $label"
+mkfs.ext4 -q -L "$label" "$device"
+staging="$(mktemp -d)"
+mount "$device" "$staging"
+mkdir -m 0701 "$staging/docker-volumes"
+umount "$staging"
+rmdir "$staging"
+udevadm settle

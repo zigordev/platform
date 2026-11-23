@@ -1,0 +1,16 @@
+[Unit]
+Description=The data disk, which outlives the host
+DefaultDependencies=no
+Requires=platform-data-disk.service
+After=platform-data-disk.service
+Conflicts=umount.target
+Before=umount.target
+
+[Mount]
+What=/dev/disk/by-label/platform-data
+Where=/srv/data
+Type=ext4
+Options=defaults,noatime
+
+[Install]
+WantedBy=multi-user.target

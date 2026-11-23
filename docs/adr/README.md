@@ -18,3 +18,7 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0006](0006-the-apply-role-is-an-administrator-behind-the-owners-approval.md) | The apply role is an administrator, behind the owner's approval | 2026-11-23 | accepted |
 | [0007](0007-the-aws-account-number-lives-in-a-github-secret.md)               | The AWS account number lives in a GitHub secret                 | 2026-11-23 | accepted |
 | [0008](0008-the-pipeline-changes-github-through-one-github-app.md)            | The pipeline changes GitHub through one GitHub App              | 2026-11-23 | accepted |
+| [0009](0009-the-host-is-built-at-its-first-boot-and-rebuilt-on-a-change.md)   | The host is built at its first boot, and rebuilt on a change    | 2026-11-23 | accepted |
+| [0010](0010-docker-on-the-host-comes-from-dockers-own-repository.md)          | Docker on the host comes from Docker's own repository           | 2026-11-23 | accepted |
+| [0011](0011-the-only-way-into-the-host-is-aws-systems-manager.md)             | The only way into the host is AWS Systems Manager               | 2026-11-23 | accepted |
+| [0012](0012-the-host-restarts-itself-at-night-when-an-update-needs-it.md)     | The host restarts itself at night when an update needs it       | 2026-11-23 | accepted |
