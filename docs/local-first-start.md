@@ -4,11 +4,11 @@ This page takes a laptop with nothing on it to a passing `pnpm check` and to the
 
 ## What you need first
 
-| Thing          | Why                                                                                        | How to get it                                                                                                                       |
-| -------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| git            | To clone the repo                                                                          | On a Mac it comes with the command line tools: `xcode-select --install`                                                             |
-| mise           | It installs the exact versions of Node.js, pnpm, gitleaks and zizmor that `mise.toml` pins | Follow [mise's getting started page](https://mise.jdx.dev/getting-started.html), including the step that activates it in your shell |
-| Docker Desktop | It runs the shared services, and the check asks it to read the compose files               | Install it from [Docker's own page](https://docs.docker.com/desktop/) and start it. It needs about 8 GB of free disk for the images |
+| Thing          | Why                                                                                                          | How to get it                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| git            | To clone the repo                                                                                            | On a Mac it comes with the command line tools: `xcode-select --install`                                                             |
+| mise           | It installs the exact versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint that `mise.toml` pins | Follow [mise's getting started page](https://mise.jdx.dev/getting-started.html), including the step that activates it in your shell |
+| Docker Desktop | It runs the shared services, and the check asks it to read the compose files                                 | Install it from [Docker's own page](https://docs.docker.com/desktop/) and start it. It needs about 8 GB of free disk for the images |
 
 Nothing else is installed by hand. Node.js and pnpm come from mise, and every other tool comes from `pnpm install`.
 

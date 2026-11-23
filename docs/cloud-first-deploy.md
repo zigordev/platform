@@ -4,12 +4,12 @@ Nothing in this repo reaches production yet. Production is built in phase 3, and
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                            | State on 2026-11-23                                                                        |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Not yet. Phase 3                                                                           |
-| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                                           |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                           |
+| What                                                 | How it will travel                                                                            | State on 2026-11-23                                                                         |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version  |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | The foundation of the AWS account is written, and waits for its first apply from the laptop |
+| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                                            |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                            |
 
 ## The path of a change
 
@@ -66,6 +66,68 @@ So a change to the shared services is a `feat` or a `fix`, or no product ever re
 A package that is marked `"private": true` is never packed or published. Every new package starts that way, and `@zigordev/stack` did too. It went public in two steps. First the owner made its first publish, with `pnpm exec zigordev first-publish @zigordev/stack` in this repo's folder. That command puts an empty version 0.0.0 on npm and ties the name to this repo, to the workflow file `ci.yml` and to the environment `release`. Then a pull request removed the mark, within the 2 days that npm gives a new tie to be used, and since then the release publishes every version, from 1.0.0 on. [Packages](https://github.com/zigordev/toolkit/blob/main/docs/handbook/packages.md), in the handbook, explains why a person makes the first publish.
 
 The version in `stack/package.json` stays `0.0.0` in git. The tag holds the real version, and the Pack job writes it into the file before it packs.
+
+## The foundation of the AWS account
+
+Before any pipeline can change AWS, the account needs a few things that the pipeline itself depends on. They are the stack `infra/bootstrap`, step 3.1 of the build plan.
+
+| What                                          | Why                                                                                                                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The bucket `zigordev-platform-opentofu-state` | Holds the OpenTofu state of every stack in this repo. It is private, keeps every earlier version for 90 days, and refuses requests without TLS                                                                                                   |
+| The key `alias/platform-opentofu-state`       | Encrypts that state. It rotates by itself, and a deletion waits 30 days                                                                                                                                                                          |
+| GitHub's sign-in to AWS                       | Lets a workflow of this repo sign in with a token that GitHub signs, so no AWS key is stored anywhere                                                                                                                                            |
+| The role `platform-opentofu-plan`             | Reads AWS for a plan, from a pull request or from `main`. It may write nothing but the state's lock file                                                                                                                                         |
+| The role `platform-opentofu-apply`            | Changes AWS, only from a job in the GitHub environment `infrastructure`, from `main`, after the owner approves the run. [Record 0006](adr/0006-the-apply-role-is-an-administrator-behind-the-owners-approval.md) says why it is an administrator |
+| The environment `infrastructure`              | The GitHub environment whose approval the apply waits for. Only the owner approves, and only `main` may run in it                                                                                                                                |
+| The budget alarm `platform-monthly`           | Emails the owner when the month's forecast passes $30, and again when $30 is spent                                                                                                                                                               |
+| The daily spending check                      | AWS's own check for odd spending, which AWS creates with every account. The stack adopts it, and makes it report from $5 of odd spend a day instead of $100                                                                                      |
+
+The address both alarms write to is not in git. The owner stores it once in Parameter Store as `/platform/ALERT_EMAIL`, and the stack reads it from there.
+
+### How it is applied
+
+The bootstrap is applied from the laptop only, never by the pipeline, because it holds the pipeline's own sign-in and the rule that makes it wait. [Record 0005](adr/0005-the-bootstrap-is-applied-from-the-laptop-only.md) says why. A session runs these commands only after the owner has seen the plan and said yes.
+
+The first time, the state bucket does not exist yet, so the state starts on the laptop and moves into the bucket at the end:
+
+```bash
+cd infra/bootstrap
+aws sso login --profile platform-ops
+printf 'terraform {\n  backend "local" {}\n}\n' > backend_override.tf
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu init -reconfigure
+AWS_PROFILE=platform-ops tofu import aws_ce_anomaly_monitor.services "$(aws ce get-anomaly-monitors --profile platform-ops --region us-east-1 --query 'AnomalyMonitors[?MonitorName==`Default-Services-Monitor`].MonitorArn' --output text)"
+AWS_PROFILE=platform-ops tofu import aws_ce_anomaly_subscription.daily "$(aws ce get-anomaly-subscriptions --profile platform-ops --region us-east-1 --query 'AnomalySubscriptions[?SubscriptionName==`Default-Services-Subscription`].SubscriptionArn' --output text)"
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu plan -out=bootstrap.tfplan
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu apply bootstrap.tfplan
+rm backend_override.tf bootstrap.tfplan
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu init -migrate-state -force-copy
+rm terraform.tfstate terraform.tfstate.backup
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu plan
+```
+
+The two imports adopt AWS's own spending check, which may exist only once per account. The last plan must say that nothing changes. The local state files are removed because they hold the alert address in plain text.
+
+Every later change is a pull request whose plan the owner reads, and then, from `main`:
+
+```bash
+cd infra/bootstrap
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu init
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu plan -out=bootstrap.tfplan
+AWS_PROFILE=platform-ops GITHUB_TOKEN="$(gh auth token)" tofu apply bootstrap.tfplan
+rm bootstrap.tfplan
+```
+
+### What it costs
+
+Measured against AWS's own price list for Ireland on 2026-11-23:
+
+| Part                  | Price                                                                                               |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| The key               | $1 a month. Each yearly rotation adds $1 a month, for the first two rotations only                  |
+| The state bucket      | $0.023 per GB a month and $0.005 per 1,000 writes, which for a few small files is well under a cent |
+| The budget alarm      | Free: AWS says budgets can be monitored "free of charge"                                            |
+| The spending check    | AWS's own default, which its FAQ calls "no effort or cost"                                          |
+| Sign-in and the roles | Free                                                                                                |
 
 ## The settings on GitHub
 
