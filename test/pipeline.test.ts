@@ -77,6 +77,13 @@ describe('the job that starts the shared services', () => {
     expect(stack).toContain('curl --fail --silent --show-error');
   });
 
+  it('sends a trace to the port an app outside a container uses, and finds it in Grafana', () => {
+    expect(stack).toContain('http://127.0.0.1:4318/v1/traces\n');
+    expect(stack).toContain(
+      'http://grafana.localhost/api/datasources/proxy/uid/tempo/api/traces/$trace_id'
+    );
+  });
+
   it('shows the containers when a step failed, and stops them whatever happened', () => {
     expect(stack).toContain('        if: failure()\n');
     expect(stack).toContain('        if: always()\n        run: pnpm local:down\n');
