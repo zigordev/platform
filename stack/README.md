@@ -188,7 +188,26 @@ networks:
 
 With the shared services running, `http://hello.localhost/api/…` reaches the app as soon as its health check passes. Its log lines show in Grafana under `hello-api`, and so do its traces and metrics.
 
-Another repo will take this package from npm and start it with `zigordev-stack up`. It is not published yet.
+### From another repo
+
+A product needs no copy of this repo. It takes this package from the public npm registry, as a dev dependency, and starts the same services with the command the package brings:
+
+```bash
+pnpm add --save-dev @zigordev/stack
+pnpm exec zigordev-stack up
+```
+
+| Command                | What it does                                                                                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zigordev-stack up`    | Starts the services, waits until each one is healthy, and pushes the dashboards and the alert rules. When they run already, it changes nothing |
+| `zigordev-stack down`  | Stops them and keeps their data                                                                                                                |
+| `zigordev-stack reset` | Stops them, deletes their data and starts them again                                                                                           |
+
+The package holds the two compose files, the dashboard and alert files already built, and the command. It has no dependency of its own. It needs Node.js 26 or later, and Docker running.
+
+The product template in `toolkit` begins its own `pnpm local:up` with `zigordev-stack up`, so one command brings up the platform and then the product.
+
+Every product starts the same project, named `platform`. Two products that hold the same version of this package therefore share one set of services, and the second start changes nothing. With two different versions, each start recreates the services that differ, so the laptop runs what was started last. Renovate proposes each new version to every product at once, which keeps them together.
 
 ## How to check that it works, and what to do when it does not
 

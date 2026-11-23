@@ -50,6 +50,7 @@ Two folders arrive in phase 3 of the build plan: `infra/` and `host/`.
 - A dashboard query groups only by labels with a few known values, never by an id, an address or a raw path. A query of the App dashboard is about the picked app only. Run a new query against the local Grafana before it goes in.
 - A panel keeps its number in `appPanels` or `platformPanels` for good, because alerts point at it. A new panel takes the next free number.
 - A new package starts with `"private": true`. It goes public only after the owner has run `zigordev first-publish` for it, which a session never runs without `--dry-run`.
+- The version in `stack/package.json` stays `0.0.0`. The release writes the tagged version when it packs. `zigordev release pack`, run by hand as a trial, changes the file too: put it back before a commit.
 - A decision about how this repo is built gets a record in `docs/adr/`, written with the `write-decision-record` skill, and a row in the index there. A decision that shapes the whole platform is recorded in `toolkit`.
 - A tool the owner has agreed to gets its row in `toolkit`'s `docs/handbook/tools.md` before it is used here.
 - Docker on the owner's laptop also holds other projects. Never stop, remove or reconfigure a container, a volume or an image that this repo did not create. A trial outside `pnpm local:up` uses a throwaway container whose name starts with `zigordev-probe-`.

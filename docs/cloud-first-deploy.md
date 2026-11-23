@@ -4,12 +4,12 @@ Nothing in this repo reaches production yet. Production is built in phase 3, and
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                            | State on 2026-11-22                                                                           |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | The release runs after every merge. The package is still private, so nothing is published yet |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Not yet. Phase 3                                                                              |
-| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                                              |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                              |
+| What                                                 | How it will travel                                                                            | State on 2026-11-23                                                                        |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below   | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval    | Not yet. Phase 3                                                                           |
+| The shared services on the host                      | The host runs the same compose files as the laptop                                            | Not yet. Phase 3                                                                           |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana | Not yet. Phase 3                                                                           |
 
 ## The path of a change
 
@@ -61,7 +61,9 @@ The title of the merged pull request decides the version:
 
 So a change to the shared services is a `feat` or a `fix`, or no product ever receives it.
 
-A package that is marked `"private": true` is never packed or published, and while the repo has no public package, nothing is tagged. `@zigordev/stack` starts that way. It goes public once the owner has made its first publish, with `pnpm exec zigordev first-publish @zigordev/stack` in this repo's folder, and a pull request has removed the mark within 2 days of it. [Packages](https://github.com/zigordev/toolkit/blob/main/docs/handbook/packages.md), in the handbook, explains why a person makes the first publish.
+A package that is marked `"private": true` is never packed or published. Every new package starts that way, and `@zigordev/stack` did too. It went public in two steps. First the owner made its first publish, with `pnpm exec zigordev first-publish @zigordev/stack` in this repo's folder. That command puts an empty version 0.0.0 on npm and ties the name to this repo, to the workflow file `ci.yml` and to the environment `release`. Then a pull request removed the mark, within the 2 days that npm gives a new tie to be used, and since then the release publishes every version, from 1.0.0 on. [Packages](https://github.com/zigordev/toolkit/blob/main/docs/handbook/packages.md), in the handbook, explains why a person makes the first publish.
+
+The version in `stack/package.json` stays `0.0.0` in git. The tag holds the real version, and the Pack job writes it into the file before it packs.
 
 ## The settings on GitHub
 
