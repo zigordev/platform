@@ -1,7 +1,3 @@
-variables {
-  adopt_existing = false
-}
-
 mock_provider "aws" {
   mock_data "aws_ssm_parameter" {
     defaults = {
