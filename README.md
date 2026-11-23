@@ -6,18 +6,18 @@ The repo is being built step by step, and each step arrives as its own pull requ
 
 ## What it is
 
-| Path                       | What it holds                                                                                                                                                                                  |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stack/`                   | The shared services as two compose files, and the command that starts them: the ingress, the telemetry agent, a local Grafana and a mail catcher. It is the package `@zigordev/stack`          |
-| `observability/`           | The standard dashboards and the alert rules, as TypeScript: one dashboard for any app, one for the platform, and four rules that each cover every app at once                                  |
-| `infra/`                   | AWS, Cloudflare, GitHub and Grafana Cloud, described as code with OpenTofu. Today it holds `bootstrap/`, what an empty AWS account needs before the pipeline can change it                     |
-| `.claude/`                 | The rules, skills, hooks and permissions that every Claude Code session works under. They are a copy of the ones in `toolkit`                                                                  |
-| `CLAUDE.md`                | What a session needs to know about this repo: where things live, its commands and its own rules                                                                                                |
-| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                    |
-| `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                            |
-| `.github/workflows/ci.yml` | The pipeline of this repo, and the release that publishes its one package. Both are short callers of what `toolkit` holds, so this repo is checked and released exactly as every other repo is |
-| `test/`                    | The tests of the repo's own setup. The first one holds the pipeline caller to its agreed shape                                                                                                 |
-| `docs/`                    | The standard docs, the decision records, and in `docs/runbooks/` one page for each alert                                                                                                       |
+| Path                       | What it holds                                                                                                                                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stack/`                   | The shared services as two compose files, and the command that starts them: the ingress, the telemetry agent, a local Grafana and a mail catcher. It is the package `@zigordev/stack`                           |
+| `observability/`           | The standard dashboards and the alert rules, as TypeScript: one dashboard for any app, one for the platform, and four rules that each cover every app at once                                                   |
+| `infra/`                   | AWS, Cloudflare, GitHub and Grafana Cloud, described as code with OpenTofu. It holds `bootstrap/`, what an empty AWS account needs before the pipeline can change it, and `github/`, the settings of every repo |
+| `.claude/`                 | The rules, skills, hooks and permissions that every Claude Code session works under. They are a copy of the ones in `toolkit`                                                                                   |
+| `CLAUDE.md`                | What a session needs to know about this repo: where things live, its commands and its own rules                                                                                                                 |
+| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                                     |
+| `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                                             |
+| `.github/workflows/ci.yml` | The pipeline of this repo, and the release that publishes its one package. Both are short callers of what `toolkit` holds, so this repo is checked and released exactly as every other repo is                  |
+| `test/`                    | The tests of the repo's own setup. The first one holds the pipeline caller to its agreed shape                                                                                                                  |
+| `docs/`                    | The standard docs, the decision records, and in `docs/runbooks/` one page for each alert                                                                                                                        |
 
 One more folder arrives as the platform is built:
 
