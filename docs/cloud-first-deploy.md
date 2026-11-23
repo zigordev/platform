@@ -23,15 +23,16 @@ flowchart LR
   run --> release["Tag the next version and publish the package"]
 ```
 
-The pipeline is not written here. `.github/workflows/ci.yml` calls the one that `toolkit` holds, at one pinned commit, so this repo is checked exactly as every other repo is. It has four jobs, and one gate that passes only when all of them passed:
+The pipeline is not written here. `.github/workflows/ci.yml` calls the one that `toolkit` holds, at one pinned commit, so this repo is checked exactly as every other repo is. It has four jobs. This repo adds one of its own, which starts the shared services for real. One gate passes only when all of them passed:
 
-| Job          | What it checks                                                         | Runs on                            |
-| ------------ | ---------------------------------------------------------------------- | ---------------------------------- |
-| Quality      | `pnpm check`, exactly as on a laptop                                   | Every pull request and every merge |
-| Title        | The pull request's title is a Conventional Commit                      | Pull requests                      |
-| Dependencies | No dependency the pull request adds has a known flaw                   | Pull requests                      |
-| Code scan    | CodeQL finds no vulnerable pattern in our own code or in the workflows | Every pull request and every merge |
-| `check`      | Every job above passed                                                 | Every pull request and every merge |
+| Job             | What it checks                                                                                                                 | Runs on                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| Quality         | `pnpm check`, exactly as on a laptop                                                                                           | Every pull request and every merge |
+| Title           | The pull request's title is a Conventional Commit                                                                              | Pull requests                      |
+| Dependencies    | No dependency the pull request adds has a known flaw                                                                           | Pull requests                      |
+| Code scan       | CodeQL finds no vulnerable pattern in our own code or in the workflows                                                         | Every pull request and every merge |
+| Shared services | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers | Every pull request and every merge |
+| `check`         | Every job above passed                                                                                                         | Every pull request and every merge |
 
 A pull request opens as a draft. Marking it ready means: merge it when `check` is green. Nobody merges by hand. A change to infrastructure will be the exception: its plan waits for the owner's approval before anything is applied.
 
@@ -85,6 +86,7 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | Its Title job is red                               | Rewrite the title as `type(scope): summary`, in lower case, with no final period                                                                                                                                                                                                                                                      |
 | Its Dependencies job is red                        | The job's summary names the dependency and its flaw. Take a fixed version, or do without it. When another package brings the dependency in and offers no fixed version, name the fixed version under `overrides` in `pnpm-workspace.yaml`                                                                                             |
 | Its Code scan job is red                           | The job's log lists each open finding with a link. Fix the code                                                                                                                                                                                                                                                                       |
+| Its Shared services job is red                     | The job's log names the container that did not become healthy, or the address that did not answer, and ends with every container's last lines. `pnpm local:up` on a laptop shows the same                                                                                                                                             |
 | The Release is red on `main`                       | Read which of its three jobs failed. Version: the titles could not be read, or the tag could not be written. Pack: the build failed. Publish: npm refused, most often because the package is not tied to this repo yet or the tie has expired, which only the owner can renew. The next merge finishes a release that stopped halfway |
 | The pipeline does not start at all                 | The caller names a commit of `toolkit` that does not hold the pipeline. Put the commit of a released version back, with its version beside it                                                                                                                                                                                         |
 | A pull request from Renovate is red, or stays open | [Dependency updates](https://github.com/zigordev/toolkit/blob/main/docs/handbook/dependency-updates.md), in the handbook, says what each case means                                                                                                                                                                                   |

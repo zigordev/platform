@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { model, type Service } from '../test/model.ts';
 
@@ -127,6 +128,12 @@ describe('the Docker proxy', () => {
     expect(get).toBe(
       '-allowGET=/v1\\..{1,2}/(version|info|events.*|containers/json.*|containers/[^/]+/json|containers/[^/]+/logs.*|networks.*)'
     );
+  });
+
+  it('runs in the group that owns the socket: 0 on Docker Desktop, and the one it is told elsewhere', () => {
+    expect(proxy?.user).toBe('65534:0');
+    const local = readFileSync(new URL('../compose.local.yaml', import.meta.url), 'utf8');
+    expect(local).toContain('    user: "65534:${DOCKER_SOCKET_GROUP:-0}"\n');
   });
 
   it('sits on a network of its own, which has no way out', () => {

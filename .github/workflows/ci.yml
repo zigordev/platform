@@ -20,9 +20,51 @@ jobs:
       contents: read
       security-events: write
 
+  stack:
+    name: Shared services
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start the shared services, as a laptop does
+        run: |
+          DOCKER_SOCKET_GROUP="$(stat -c %g /var/run/docker.sock)"
+          export DOCKER_SOCKET_GROUP
+          pnpm local:up
+
+      - name: Open each local address
+        run: |
+          for address in grafana.localhost/api/health mail.localhost/readyz traefik.localhost/api/overview alloy.localhost/-/ready; do
+            curl --fail --silent --show-error --output /dev/null --max-time 10 "http://$address"
+            echo "http://$address answers"
+          done
+
+      - name: Show the containers when a step failed
+        if: failure()
+        working-directory: stack
+        run: |
+          docker compose --file compose.yaml --file compose.local.yaml ps --all
+          docker compose --file compose.yaml --file compose.local.yaml logs --tail 40
+
+      - name: Stop them
+        if: always()
+        run: pnpm local:down
+
   check:
     name: check
-    needs: [pipeline]
+    needs: [pipeline, stack]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -30,10 +72,13 @@ jobs:
     steps:
       - name: Pass only when every job passed
         env:
-          RESULT: ${{ needs.pipeline.result }}
+          PIPELINE: ${{ needs.pipeline.result }}
+          STACK: ${{ needs.stack.result }}
         run: |
-          echo "The pipeline ended with: $RESULT"
-          test "$RESULT" = "success"
+          echo "The pipeline ended with: $PIPELINE"
+          echo "The shared services ended with: $STACK"
+          test "$PIPELINE" = "success"
+          test "$STACK" = "success"
 
   release:
     name: Release

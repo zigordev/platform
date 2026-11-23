@@ -1,6 +1,6 @@
 services:
   docker-proxy:
-    user: "65534:0"
+    user: "65534:${DOCKER_SOCKET_GROUP:-0}"
 
   traefik:
     environment:

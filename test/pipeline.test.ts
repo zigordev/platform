@@ -32,17 +32,54 @@ describe('the pipeline of this repo', () => {
     expect(caller).toContain('\npermissions: {}\n');
   });
 
-  it('ends in the gate named check, which passes only when the pipeline passed', () => {
+  it('ends in the gate named check, which passes only when the pipeline and the shared services passed', () => {
     const gate = job('check');
     expect(gate).toContain('name: check\n');
-    expect(gate).toContain('needs: [pipeline]\n');
+    expect(gate).toContain('needs: [pipeline, stack]\n');
     expect(gate).toContain('if: always()\n');
-    expect(gate).toContain('test "$RESULT" = "success"\n');
+    expect(gate).toContain('test "$PIPELINE" = "success"\n');
+    expect(gate).toContain('test "$STACK" = "success"\n');
   });
 
   it('runs on every pull request and on every merge to main', () => {
     expect(caller).toContain('  pull_request:\n');
     expect(caller).toContain('  push:\n    branches: [main]\n');
+  });
+});
+
+describe('the job that starts the shared services', () => {
+  const stack = job('stack');
+
+  it('runs on the kind of machine the host is, and may only read the repo', () => {
+    expect(stack).toContain('runs-on: ubuntu-24.04-arm\n');
+    expect(stack).toContain('    permissions:\n      contents: read\n');
+    expect(stack).not.toContain('write');
+  });
+
+  it('starts them with the command a person uses, so it waits for every health check and pushes the dashboards', () => {
+    expect(stack).toContain('          pnpm local:up\n');
+  });
+
+  it('gives the Docker proxy the group that owns the socket on that machine', () => {
+    expect(stack).toContain('DOCKER_SOCKET_GROUP="$(stat -c %g /var/run/docker.sock)"\n');
+    expect(stack).toContain('          export DOCKER_SOCKET_GROUP\n');
+  });
+
+  it('opens each of the four local addresses', () => {
+    expect(stack).toContain(
+      'for address in grafana.localhost/api/health mail.localhost/readyz traefik.localhost/api/overview alloy.localhost/-/ready; do'
+    );
+    expect(stack).toContain('curl --fail --silent --show-error');
+  });
+
+  it('shows the containers when a step failed, and stops them whatever happened', () => {
+    expect(stack).toContain('        if: failure()\n');
+    expect(stack).toContain('        if: always()\n        run: pnpm local:down\n');
+  });
+
+  it('pins its two actions to a commit, like the pipeline it runs beside', () => {
+    const pins = [...stack.matchAll(/uses: [\w./-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/g)];
+    expect(pins).toHaveLength(2);
   });
 });
 
@@ -64,6 +101,7 @@ describe('the release of this repo', () => {
     );
     expect(job('pipeline')).not.toContain('id-token');
     expect(job('check')).not.toContain('write');
+    expect(job('stack')).not.toContain('id-token');
   });
 
   it('takes its settings from the shared ones, through a file that semantic-release can read', () => {
