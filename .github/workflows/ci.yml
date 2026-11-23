@@ -80,9 +80,43 @@ jobs:
         if: always()
         run: pnpm local:down
 
+  infra-plan:
+    name: Infrastructure plan
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      apply: ${{ steps.plan.outputs.apply }}
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: Sign in to AWS with the read-only role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/platform-opentofu-plan
+          role-session-name: platform-plan-${{ github.run_id }}
+          aws-region: eu-west-1
+          mask-aws-account-id: true
+
+      - name: Plan every stack
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: infra/run.sh plan
+
   check:
     name: check
-    needs: [pipeline, stack]
+    needs: [pipeline, stack, infra-plan]
     if: always()
     runs-on: ubuntu-26.04
     timeout-minutes: 5
@@ -92,11 +126,14 @@ jobs:
         env:
           PIPELINE: ${{ needs.pipeline.result }}
           STACK: ${{ needs.stack.result }}
+          INFRA: ${{ needs.infra-plan.result }}
         run: |
           echo "The pipeline ended with: $PIPELINE"
           echo "The shared services ended with: $STACK"
+          echo "The infrastructure plan ended with: $INFRA"
           test "$PIPELINE" = "success"
           test "$STACK" = "success"
+          test "$INFRA" = "success"
 
   release:
     name: Release
@@ -106,3 +143,36 @@ jobs:
     permissions:
       contents: write
       id-token: write
+
+  infra-apply:
+    name: Infrastructure apply
+    needs: [check, infra-plan]
+    if: github.event_name == 'push' && needs.infra-plan.outputs.apply != ''
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    environment: infrastructure
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: Sign in to AWS with the apply role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/platform-opentofu-apply
+          role-session-name: platform-apply-${{ github.run_id }}
+          aws-region: eu-west-1
+          mask-aws-account-id: true
+
+      - name: Apply every stack but the bootstrap
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: infra/run.sh apply

@@ -4,21 +4,23 @@ The infrastructure and the shared services of every zigordev product: the ingres
 
 ## Where things live
 
-| Path                       | What it holds                                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stack/`                   | `@zigordev/stack`: the shared services as `compose.yaml` and `compose.local.yaml`, and the command `zigordev-stack`                                                                               |
-| `stack/src`                | The command, and `compose.test.ts`, which holds every service to the container rules                                                                                                              |
-| `stack/observability/`     | The dashboard and alert files that gcx pushes. `pnpm build` writes them, and git ignores them                                                                                                     |
-| `observability/src`        | The dashboards and the alert rules as TypeScript, and `build.ts`, which writes those files                                                                                                        |
-| `infra/bootstrap`          | What an empty AWS account needs first: the state bucket and its key, GitHub's sign-in, the plan and apply roles, the budget alarm, the spending check and the GitHub environment `infrastructure` |
-| `infra/bootstrap/tests`    | The stack's tests, which run against stand-ins for AWS and GitHub                                                                                                                                 |
-| `docs/runbooks/`           | One page for each alert, named after the alert                                                                                                                                                    |
-| `docs/`                    | The standard docs, and the decision records in `docs/adr/`                                                                                                                                        |
-| `.claude/`                 | A copy of the shared rules, skills, hooks and permissions. `toolkit` owns them                                                                                                                    |
-| `.github/workflows/ci.yml` | The callers of the pipeline and of the release in `toolkit`, both pinned to one commit of it, and the job that starts the shared services                                                         |
-| `test/`                    | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                                                                                                          |
-| `mise.toml`                | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                       |
-| `pnpm-workspace.yaml`      | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                               |
+| Path                          | What it holds                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stack/`                      | `@zigordev/stack`: the shared services as `compose.yaml` and `compose.local.yaml`, and the command `zigordev-stack`                                                                               |
+| `stack/src`                   | The command, and `compose.test.ts`, which holds every service to the container rules                                                                                                              |
+| `stack/observability/`        | The dashboard and alert files that gcx pushes. `pnpm build` writes them, and git ignores them                                                                                                     |
+| `observability/src`           | The dashboards and the alert rules as TypeScript, and `build.ts`, which writes those files                                                                                                        |
+| `infra/bootstrap`             | What an empty AWS account needs first: the state bucket and its key, GitHub's sign-in, the plan and apply roles, the budget alarm, the spending check and the GitHub environment `infrastructure` |
+| `infra/bootstrap/tests`       | The stack's tests, which run against stand-ins for AWS and GitHub                                                                                                                                 |
+| `infra/run.sh`                | Plans, checks for drift or applies every stack in `infra/`, the same way in the pipeline and in the drift check. It never applies the bootstrap                                                   |
+| `docs/runbooks/`              | One page for each alert, named after the alert                                                                                                                                                    |
+| `docs/`                       | The standard docs, and the decision records in `docs/adr/`                                                                                                                                        |
+| `.claude/`                    | A copy of the shared rules, skills, hooks and permissions. `toolkit` owns them                                                                                                                    |
+| `.github/workflows/ci.yml`    | The callers of the pipeline and of the release in `toolkit`, both pinned to one commit of it, and the job that starts the shared services                                                         |
+| `.github/workflows/drift.yml` | The weekly check that every stack still matches its code                                                                                                                                          |
+| `test/`                       | The tests of the repo's own setup. `test/pipeline.test.ts` holds the caller to its shape                                                                                                          |
+| `mise.toml`                   | The pinned versions of Node.js, pnpm, gitleaks, zizmor, OpenTofu and tflint                                                                                                                       |
+| `pnpm-workspace.yaml`         | The workspace, the single version of each dependency, and the supply-chain settings                                                                                                               |
 
 The folder `host/` arrives in step 3.4 of the build plan.
 
@@ -42,6 +44,9 @@ The folder `host/` arrives in step 3.4 of the build plan.
 - `infra/bootstrap` is applied from the laptop only, with the owner's AWS session and GitHub login, after the owner has said yes to that plan. Record 0005 says why. `docs/cloud-first-deploy.md` holds the commands.
 - Every OpenTofu command against AWS names the profile, `AWS_PROFILE=platform-ops`. The GitHub provider takes the owner's login as `GITHUB_TOKEN="$(gh auth token)"` in the command itself, never from a file.
 - An infrastructure change has a title that starts with `chore(infra)`, so that it releases no package.
+- The pipeline plans every stack on every pull request with the read-only role, and applies a changed stack only after the owner approves the run in the environment `infrastructure`. A session never approves it, and never starts the drift check by hand without the owner's yes.
+- A new stack is a folder in `infra/` with a `providers.tf`, its own `opentofu.tofu`, its state under its own key in the state bucket, and tests in its own `tests/`. `infra/run.sh` finds it by itself, and `pnpm lint:infra` and `pnpm test:infra` must cover it.
+- The pipeline builds each role's name from the secret `AWS_ACCOUNT_ID`, which the owner sets (record 0007). Never from a variable: GitHub prints a variable's value in the public logs.
 - No account number, email address or other personal value goes into git. The code reads it from AWS, or from Parameter Store, where the owner stores it.
 - A role that GitHub signs in to trusts GitHub's immutable subject, `repo:zigordev@261390829/<repo>@<repo id>:<context>`. `gh api repos/zigordev/<repo>/actions/oidc/customization/sub` prints the prefix. A tested trust that uses the old form fails without an error until a workflow signs in.
 - Each stack sets its lowest OpenTofu version in its own `opentofu.tofu`, never as `required_version` in a `.tf` file, which OpenTofu ignores. Providers are pinned to one exact version, and `.terraform.lock.hcl` holds their hashes for macOS on Apple silicon and for Linux on x86 and Arm.
