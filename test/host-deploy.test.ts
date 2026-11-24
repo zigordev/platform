@@ -155,6 +155,10 @@ function forget(): void {
 }
 
 function run(...args: string[]) {
+  return runWith({}, ...args);
+}
+
+function runWith(extra: Record<string, string>, ...args: string[]) {
   const result = spawnSync('bash', [script, ...args], {
     encoding: 'utf8',
     env: {
@@ -168,6 +172,8 @@ function run(...args: string[]) {
       FAKE_DIR: join(work, 'fake'),
       FAKE_AWS: join(work, 'aws'),
       FAKE_SECRET_NAME: 'HELLO_API_KEYS',
+      PLATFORM_SETUP_MARKER: join(work, 'setup-done'),
+      ...extra,
     },
   });
   const lines = result.stdout.trimEnd().split('\n');
@@ -220,6 +226,7 @@ beforeEach(() => {
   work = mkdtempSync(join(tmpdir(), 'host-deploy-'));
   mkdirSync(join(work, 'run'));
   mkdirSync(join(work, 'fake'));
+  writeFileSync(join(work, 'setup-done'), '2026-11-24T13:30:00Z\n');
   repo('hello');
   parameter('/hello/HELLO_API_KEYS', secret);
   parameter('/hello/POSTGRES_PASSWORD', 'another-hidden-value');
@@ -553,6 +560,40 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     expect(result.code).toBe(2);
     expect(result.last).toMatch(/^platform-deploy: result=refused reason=bad-input /);
     expect(calls()).toEqual([]);
+  });
+
+  it('reads the record with a listing, which answers alike whether or not a record exists', () => {
+    const first = release();
+    deploy(first);
+    const awsCalls = readFileSync(join(work, 'fake', 'aws-calls'), 'utf8');
+    expect(awsCalls).toContain('ssm get-parameters-by-path --path /platform/deploy');
+    expect(awsCalls).not.toMatch(/ssm get-parameter /);
+  });
+
+  it("waits for the host's first-boot setup, and refuses when it does not finish in time", () => {
+    const first = release();
+    rmSync(join(work, 'setup-done'));
+    const result = runWith(
+      { PLATFORM_DEPLOY_SETUP_WAIT: '0' },
+      '--target',
+      'hello',
+      '--repo',
+      'hello',
+      '--dir',
+      '.',
+      '--action',
+      'deploy',
+      '--commit',
+      first,
+      '--images',
+      ours
+    );
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=busy target=hello commit=${first}`
+    );
+    expect(result.stdout).toContain("The host's first-boot setup did not finish within 0 seconds");
+    expect(existsSync(join(work, 'fake', 'aws-calls'))).toBe(false);
   });
 
   it('refuses while another deploy of the same target holds the lock', () => {

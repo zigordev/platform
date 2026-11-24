@@ -11,6 +11,8 @@ socket="${PLATFORM_DOCKER_SOCKET:-/var/run/docker.sock}"
 health_timeout="${PLATFORM_DEPLOY_HEALTH_TIMEOUT:-180}"
 lock_timeout="${PLATFORM_DEPLOY_LOCK_TIMEOUT:-840}"
 region="${PLATFORM_AWS_REGION:-eu-west-1}"
+setup_marker="${PLATFORM_SETUP_MARKER:-/var/lib/platform/setup-done}"
+setup_wait="${PLATFORM_DEPLOY_SETUP_WAIT:-600}"
 shared_target="platform"
 
 export HOME="${HOME:-/root}"
@@ -112,15 +114,8 @@ field() {
 }
 
 read_record() {
-  local code=0
-  aws --region "$region" ssm get-parameter --name "$records/$1" --query Parameter.Value --output text \
-    > "$work/record" 2> "$work/record.err" || code=$?
-  if [ "$code" -eq 0 ]; then
-    cat "$work/record"
-  elif ! grep -q ParameterNotFound "$work/record.err"; then
-    cat "$work/record.err" >&2
-    return 1
-  fi
+  aws --region "$region" ssm get-parameters-by-path --path "$records" --output json > "$work/records.json" || return 1
+  jq -r --arg name "$records/$1" '.Parameters[] | select(.Name == $name) | .Value' "$work/records.json"
 }
 
 write_record() {
@@ -131,6 +126,20 @@ write_record() {
       previous: (if $previous == "" then null else {commit: $previous, images: $previous_images} end),
       deployedAt: $at}')"
   aws --region "$region" ssm put-parameter --name "$records/$1" --type String --overwrite --value "$value" > /dev/null
+}
+
+wait_for_setup() {
+  local waited=0
+  until [ -f "$setup_marker" ]; do
+    if [ "$waited" -ge "$setup_wait" ]; then
+      refuse busy "The host's first-boot setup did not finish within $setup_wait seconds"
+    fi
+    if [ "$waited" -eq 0 ]; then
+      say "Waiting for the host's first-boot setup to finish"
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
 }
 
 take_lock() {
@@ -401,6 +410,7 @@ reason_of() {
 deploy() {
   local current current_commit current_images new_release code previous_commit previous_images
   local reason touched restored restore_code service
+  wait_for_setup
   take_lock "$target"
   current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
   current_commit="$(field "$current" .commit)"
@@ -470,6 +480,7 @@ deploy() {
 
 rollback() {
   local current current_commit previous_commit previous_images code
+  wait_for_setup
   take_lock "$target"
   current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
   current_commit="$(field "$current" .commit)"
