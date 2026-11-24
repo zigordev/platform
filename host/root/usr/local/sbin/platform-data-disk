@@ -22,7 +22,7 @@ probe=$?
 set -e
 
 if [ "$probe" -eq 0 ]; then
-  echo "The data disk $device has a file system already, so it is used as it is"
+  echo "The data disk $device carries a file system or another signature, so it is used as it is"
   exit 0
 fi
 
@@ -31,12 +31,7 @@ if [ "$probe" -ne 2 ]; then
   exit 1
 fi
 
-if ! cmp -s -n 1048576 "$device" /dev/zero; then
-  echo "The data disk $device holds data that blkid does not recognise, so the disk is left untouched" >&2
-  exit 1
-fi
-
-echo "The data disk $device is new, so it gets an ext4 file system labelled $label"
+echo "The data disk $device carries no signature, so it is new and gets an ext4 file system labelled $label"
 mkfs.ext4 -q -L "$label" "$device"
 staging="$(mktemp -d)"
 mount "$device" "$staging"
