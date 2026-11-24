@@ -4,7 +4,7 @@ services:
 
   alloy:
     environment:
-      OTLP_DESTINATION: ${GRAFANA_OTLP_URL}
+      OTLP_DESTINATION: ${GRAFANA_OTLP_URL}/otlp
       OTLP_USERNAME: ${GRAFANA_STACK_ID}
       OTLP_PASSWORD: ${GRAFANA_ALLOY_TOKEN}
       LOKI_DESTINATION: ${GRAFANA_LOKI_URL}/loki/api/v1/push

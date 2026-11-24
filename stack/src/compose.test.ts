@@ -238,7 +238,6 @@ describe('the telemetry agent', () => {
       })
     );
     for (const line of [
-      'OTLP_DESTINATION: ${GRAFANA_OTLP_URL}',
       'OTLP_USERNAME: ${GRAFANA_STACK_ID}',
       'OTLP_PASSWORD: ${GRAFANA_ALLOY_TOKEN}',
       'LOKI_DESTINATION: ${GRAFANA_LOKI_URL}/loki/api/v1/push',
@@ -248,6 +247,10 @@ describe('the telemetry agent', () => {
       expect(productionText).toContain(`      ${line}\n`);
     }
     expect(production.services.alloy?.environment?.ALLOY_CONFIG).toBe(config);
+  });
+
+  it("adds Grafana Cloud's OTLP path in production, because the stack's stored address has none and the gateway answers 404 without it", () => {
+    expect(productionText).toContain('      OTLP_DESTINATION: ${GRAFANA_OTLP_URL}/otlp\n');
   });
 
   it("reads each container's memory from the host's file in production, and finds no file on the laptop", () => {
