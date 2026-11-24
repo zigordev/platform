@@ -168,22 +168,22 @@ pnpm local:reset
 | `http://traefik.localhost` | Traefik's own pages: the routes it knows, and why one is missing      |
 | `http://alloy.localhost`   | Alloy's own pages: each part of its config, and whether it is healthy |
 
-The worked example is an app named `hello-api`, of a product named `hello`. This is everything its compose file needs for the platform to serve it:
+The worked example is an app named `playground-api`, of a product named `playground`. This is everything its compose file needs for the platform to serve it:
 
 ```yaml
 services:
-  hello-api:
-    image: ghcr.io/zigordev/hello-api:1f3a9c2
+  playground-api:
+    image: ghcr.io/zigordev/playground-api:1f3a9c2
     environment:
       PORT: "3000"
-      OTEL_SERVICE_NAME: hello-api
+      OTEL_SERVICE_NAME: playground-api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
     healthcheck:
       test: [CMD, node, healthcheck.js]
     labels:
       traefik.enable: "true"
-      traefik.http.routers.hello-api.rule: Host(`hello.localhost`) && PathPrefix(`/api`)
-      traefik.http.services.hello-api.loadbalancer.server.port: "3000"
+      traefik.http.routers.playground-api.rule: Host(`playground.localhost`) && PathPrefix(`/api`)
+      traefik.http.services.playground-api.loadbalancer.server.port: "3000"
     networks: [zigordev]
 
 networks:
@@ -191,7 +191,7 @@ networks:
     external: true
 ```
 
-With the shared services running, `http://hello.localhost/api/…` reaches the app as soon as its health check passes. Its log lines show in Grafana under `hello-api`, and so do its traces and metrics.
+With the shared services running, `http://playground.localhost/api/…` reaches the app as soon as its health check passes. Its log lines show in Grafana under `playground-api`, and so do its traces and metrics.
 
 ### From another repo
 

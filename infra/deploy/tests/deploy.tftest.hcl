@@ -6,17 +6,22 @@ mock_provider "aws" {
   }
 }
 
-run "only_the_shared_services_deploy_while_no_product_has_a_repo" {
+run "the_shared_services_and_each_product_with_a_repo_deploy" {
   command = plan
 
   assert {
-    condition     = keys(aws_ssm_document.deploy) == ["platform"]
-    error_message = "Today only the shared services deploy: hello has no repo yet."
+    condition     = toset(keys(aws_ssm_document.deploy)) == toset(["platform", "playground"])
+    error_message = "The shared services deploy, and so does the playground, whose entry names its repo."
   }
 
   assert {
-    condition     = keys(aws_iam_role.deploy) == ["platform"]
+    condition     = toset(keys(aws_iam_role.deploy)) == toset(["platform", "playground"])
     error_message = "A role exists only for a target that deploys."
+  }
+
+  assert {
+    condition     = nonsensitive(jsondecode(aws_iam_role.deploy["playground"].assume_role_policy)).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:zigordev@261390829/playground@1470249518:environment:production"
+    error_message = "The playground's role trusts the environment production of its own repo."
   }
 }
 
