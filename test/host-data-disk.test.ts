@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -80,7 +81,7 @@ describe('platform-data-disk', () => {
     const result = run({ FAKE_BLKID_EXIT: '0' });
     expect(result.code).toBe(0);
     expect(result.calls).toEqual([`blkid -p ${device}`]);
-    expect(result.stdout).toContain('has a file system already');
+    expect(result.stdout).toContain('used as it is');
   });
 
   it('gives a new, empty disk an ext4 file system with its label and the folder for the volumes', () => {
@@ -96,14 +97,12 @@ describe('platform-data-disk', () => {
     ]);
   });
 
-  it('never formats a disk that holds data blkid does not recognise', () => {
-    const data = Buffer.alloc(1024 * 1024);
-    data.write('a database page', 4096);
-    writeFileSync(device, data);
+  it('formats a new encrypted EBS disk, whose blocks read as noise after its first 4 KB', () => {
+    writeFileSync(device, Buffer.concat([Buffer.alloc(4096), randomBytes(1024 * 1024 - 4096)]));
     const result = run({ FAKE_BLKID_EXIT: '2' });
-    expect(result.code).toBe(1);
-    expect(result.calls).toEqual([`blkid -p ${device}`]);
-    expect(result.stderr).toContain('left untouched');
+    expect(result.code).toBe(0);
+    expect(result.calls).toContain(`mkfs.ext4 -q -L platform-data ${device}`);
+    expect(result.stdout).toContain('carries no signature');
   });
 
   it('stops without touching the disk when blkid cannot read it', () => {
