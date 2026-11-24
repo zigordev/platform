@@ -1,7 +1,7 @@
 {
   "name": "platform-observability",
   "private": true,
-  "description": "The standard dashboards and alert rules of the zigordev platform, as code. Its build writes them as files into the stack package, which gcx pushes to Grafana",
+  "description": "The standard dashboards and alert rules of the zigordev platform, as code. Its build writes them as files into the stack package, which gcx pushes to Grafana, on the laptop and from the pipeline to Grafana Cloud",
   "license": "UNLICENSED",
   "type": "module",
   "engines": {
@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "node src/main.ts ../stack/observability",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "push": "node src/push-main.ts ../stack/observability"
   },
   "dependencies": {
     "@grafana/grafana-foundation-sdk": "catalog:"
