@@ -146,10 +146,10 @@ describe('push', () => {
   it('pushes the files, then deletes what the folder zigordev holds and the files no longer do', () => {
     const folder = files(manifest('Dashboard', 'app', 'zigordev'));
     const { calls, gcx } = recording({
-      'resources get dashboards -o json': ok(
+      'resources get dashboards --limit 0 -o json': ok(
         listing(manifest('Dashboard', 'app', 'zigordev'), manifest('Dashboard', 'old', 'zigordev'))
       ),
-      'resources get alertrules -o json': ok(
+      'resources get alertrules --limit 0 -o json': ok(
         listing(manifest('AlertRule', 'gone', 'zigordev'), manifest('AlertRule', 'theirs', 'other'))
       ),
     });
@@ -157,13 +157,25 @@ describe('push', () => {
     expect(push(folder, gcx, output)).toBe(0);
     expect(calls).toEqual([
       'resources push --path /resources --on-error abort',
-      'resources get dashboards -o json',
+      'resources get dashboards --limit 0 -o json',
       'resources delete dashboards/old',
-      'resources get alertrules -o json',
+      'resources get alertrules --limit 0 -o json',
       'resources delete alertrules/gone',
     ]);
     expect(out.join('')).toContain('push: pushed 1 files');
     expect(out.join('')).toContain('push: deleted dashboards/old, which the files no longer hold');
+  });
+
+  it('lists every item of a kind, because gcx lists only the first 50 by default and Grafana Cloud held 108 alert rules on 2026-11-24', () => {
+    const folder = files(manifest('Dashboard', 'app', 'zigordev'));
+    const { calls, gcx } = recording({});
+    const { output } = capture();
+    expect(push(folder, gcx, output)).toBe(0);
+    const listings = calls.filter((call) => call.startsWith('resources get '));
+    expect(listings).toHaveLength(2);
+    for (const call of listings) {
+      expect(call).toContain(' --limit 0 ');
+    }
   });
 
   it('stops before deleting anything when the push fails', () => {
@@ -184,7 +196,7 @@ describe('push', () => {
   it('stops when a listing fails', () => {
     const folder = files(manifest('Dashboard', 'app', 'zigordev'));
     const { calls, gcx } = recording({
-      'resources get dashboards -o json': { code: 4, stdout: '', stderr: 'no' },
+      'resources get dashboards --limit 0 -o json': { code: 4, stdout: '', stderr: 'no' },
     });
     const { err, output } = capture();
     expect(push(folder, gcx, output)).toBe(4);
@@ -195,7 +207,9 @@ describe('push', () => {
   it('stops when a delete fails', () => {
     const folder = files(manifest('Dashboard', 'app', 'zigordev'));
     const { calls, gcx } = recording({
-      'resources get dashboards -o json': ok(listing(manifest('Dashboard', 'old', 'zigordev'))),
+      'resources get dashboards --limit 0 -o json': ok(
+        listing(manifest('Dashboard', 'old', 'zigordev'))
+      ),
       'resources delete dashboards/old': { code: 5, stdout: '', stderr: 'locked' },
     });
     const { err, output } = capture();
@@ -242,6 +256,38 @@ describe('dockerGcx', () => {
       expect(args).toContain('GRAFANA_TOKEN');
       expect(args).toContain('/tmp/observability:/resources:ro');
       expect(args.slice(-3)).toEqual(['grafana/gcx:v1.8.0', 'resources', 'push']);
+    } finally {
+      process.env.PATH = path;
+    }
+  });
+
+  it("reads an answer larger than the 1 MiB that Node keeps by default, as Grafana Cloud's 1.6 MB dashboard listing was on 2026-11-24", () => {
+    const bin = join(work, 'bin');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\nhead -c 4194304 /dev/zero | tr "\\000" x\n');
+    chmodSync(join(bin, 'docker'), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path ?? ''}`;
+    try {
+      const result = dockerGcx('grafana/gcx:v1.8.0', '/tmp/observability')(['resources', 'get']);
+      expect(result.stderr).toBe('');
+      expect(result.code).toBe(0);
+      expect(result.stdout).toHaveLength(4194304);
+    } finally {
+      process.env.PATH = path;
+    }
+  });
+
+  it('says why when docker cannot run gcx at all, instead of failing without a word', () => {
+    const bin = join(work, 'empty');
+    mkdirSync(bin);
+    const path = process.env.PATH;
+    process.env.PATH = bin;
+    try {
+      const result = dockerGcx('grafana/gcx:v1.8.0', '/tmp/observability')(['resources', 'get']);
+      expect(result.code).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('spawnSync docker ENOENT');
     } finally {
       process.env.PATH = path;
     }
