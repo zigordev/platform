@@ -1,4 +1,4 @@
 {
-  "grafanaCloud": false,
+  "grafanaCloud": true,
   "removeBy": "2027-01-31"
 }
