@@ -216,12 +216,12 @@ describe('gcxImage', () => {
     expect(() => gcxImage('services: {}\n')).toThrow('names no gcx image');
   });
 
-  it('finds the image in the real laptop stack', () => {
+  it('finds the image in the real laptop stack, pinned by its digest', () => {
     const compose = readFileSync(
       new URL('../../stack/compose.local.yaml', import.meta.url),
       'utf8'
     );
-    expect(gcxImage(compose)).toMatch(/^grafana\/gcx:v\d+\.\d+\.\d+$/);
+    expect(gcxImage(compose)).toMatch(/^grafana\/gcx:v\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/);
   });
 });
 

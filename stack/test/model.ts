@@ -32,6 +32,8 @@ export interface Service {
   readonly volumes?: readonly Mount[];
   readonly networks?: Readonly<Record<string, unknown>>;
   readonly healthcheck?: { readonly test?: readonly string[] };
+  readonly restart?: string;
+  readonly depends_on?: Readonly<Record<string, { readonly condition?: string }>>;
   readonly profiles?: readonly string[];
   readonly tmpfs?: readonly string[];
 }

@@ -106,8 +106,9 @@ describe('the job that starts the shared services', () => {
 describe('the release of this repo', () => {
   it('is the one toolkit holds too, at the same commit and version as the pipeline', () => {
     const calls = [...caller.matchAll(pinned)].map((match) => match.slice(1));
-    expect(calls.map(([workflow]) => workflow)).toEqual(['check', 'release']);
+    expect(calls.map(([workflow]) => workflow)).toEqual(['check', 'release', 'deploy']);
     expect(calls[1]?.slice(1)).toEqual(calls[0]?.slice(1));
+    expect(calls[2]?.slice(1)).toEqual(calls[0]?.slice(1));
   });
 
   it('runs after the gate, and only on a merge to main', () => {
@@ -251,5 +252,37 @@ describe('the account number', () => {
       expect(workflow).not.toContain('vars.AWS_ACCOUNT_ID');
       expect(workflow).toMatch(/arn:aws:iam::\$\{\{ secrets\.AWS_ACCOUNT_ID \}\}:role\//);
     }
+  });
+});
+
+describe('the deploy of the shared services', () => {
+  const deploy = job('deploy');
+
+  it('is the deploy workflow toolkit holds, at the same commit and version as the pipeline', () => {
+    expect(deploy).toMatch(
+      /uses: zigordev\/toolkit\/\.github\/workflows\/deploy\.yml@[0-9a-f]{40} # v\d+\.\d+\.\d+\n/
+    );
+  });
+
+  it('runs on main only, after the gate, and after the apply when a stack changed', () => {
+    expect(deploy).toContain('needs: [check, infra-apply]\n');
+    expect(deploy).toContain(
+      "if: always() && github.event_name == 'push' && needs.check.result == 'success' && (needs.infra-apply.result == 'success' || needs.infra-apply.result == 'skipped')\n"
+    );
+  });
+
+  it('grants exactly what the deploy workflow asks for, or GitHub would stop the run when it starts', () => {
+    expect(deploy).toContain(
+      '    permissions:\n      contents: read\n      id-token: write\n      attestations: read\n'
+    );
+  });
+
+  it('deploys the target platform from the folder stack, with no public address to ask', () => {
+    expect(deploy).toContain('    with:\n      target: platform\n      compose-dir: stack\n');
+    expect(deploy).not.toContain('health-url');
+  });
+
+  it('hands over the account number as a secret, which GitHub hides in every log', () => {
+    expect(deploy).toContain('    secrets:\n      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}\n');
   });
 });
