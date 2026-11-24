@@ -695,6 +695,17 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     );
   });
 
+  it('refuses when Parameter Store answers nothing, instead of deploying with empty secrets', () => {
+    const first = release();
+    fail('silent-aws');
+    const result = deploy(first);
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=unreachable target=playground commit=${first}`
+    );
+    expect(acts()).toEqual([]);
+  });
+
   it('still ends with a result when something unexpected stops it', () => {
     const first = release();
     parameter('/platform/deploy/playground', 'not json');

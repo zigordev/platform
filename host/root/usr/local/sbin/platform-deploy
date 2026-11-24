@@ -113,9 +113,17 @@ field() {
   fi
 }
 
+aws_json() {
+  local answer
+  answer="$(aws --region "$region" "$@" --output json)" || return 1
+  printf '%s' "$answer" | jq -e 'type == "object"' > /dev/null 2>&1 || return 1
+  printf '%s\n' "$answer"
+}
+
 read_record() {
-  aws --region "$region" ssm get-parameters-by-path --path "$records" --output json > "$work/records.json" || return 1
-  jq -r --arg name "$records/$1" '.Parameters[] | select(.Name == $name) | .Value' "$work/records.json"
+  local answer
+  answer="$(aws_json ssm get-parameters-by-path --path "$records")" || return 1
+  printf '%s' "$answer" | jq -r --arg name "$records/$1" '.Parameters[] | select(.Name == $name) | .Value'
 }
 
 write_record() {
@@ -274,10 +282,15 @@ inspect_release() {
 }
 
 fetch_secrets() {
-  aws --region "$region" ssm get-parameters --with-decryption --names "$@" --output json > "$work/batch.json" || return 1
-  jq -r '.Parameters[] | "\(.Name)|\(.Value | @base64)"' "$work/batch.json" >> "$work/secrets"
-  jq -r '.InvalidParameters[]' "$work/batch.json" >> "$work/missing"
-  rm -f "$work/batch.json"
+  local answer found missing
+  answer="$(aws_json ssm get-parameters --with-decryption --names "$@")" || return 1
+  found="$(printf '%s' "$answer" | jq '.Parameters | length')"
+  missing="$(printf '%s' "$answer" | jq '.InvalidParameters | length')"
+  if [ "$((found + missing))" -ne "$#" ]; then
+    return 1
+  fi
+  printf '%s' "$answer" | jq -r '.Parameters[] | "\(.Name)|\(.Value | @base64)"' >> "$work/secrets"
+  printf '%s' "$answer" | jq -r '.InvalidParameters[]' >> "$work/missing"
 }
 
 load_secrets() {
@@ -556,7 +569,7 @@ redeploy_one() {
 redeploy_recorded() {
   local names record_name value failures=0 code
   read_socket_group
-  aws --region "$region" ssm get-parameters-by-path --path "$records" --output json > "$work/records.json" ||
+  aws_json ssm get-parameters-by-path --path "$records" > "$work/records.json" ||
     refuse unreachable "Parameter Store did not answer"
   names="$(jq -r --arg first "$records/$shared_target" \
     '.Parameters | sort_by(if .Name == $first then 0 else 1 end, .Name) | .[].Name' "$work/records.json")"
