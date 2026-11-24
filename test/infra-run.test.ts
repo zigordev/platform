@@ -31,6 +31,7 @@ case "$command" in
     ;;
   apply)
     echo "apply $stack" >> "$FAKE_LOG"
+    echo "$*" >> "$FAKE_APPLY_ARGS"
     ;;
 esac
 `;
@@ -43,6 +44,7 @@ interface Run {
   readonly outputs: string;
   readonly applied: string;
   readonly planArgs: string;
+  readonly applyArgs: string;
 }
 
 let work: string;
@@ -52,7 +54,8 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
   const outputs = join(work, 'outputs.txt');
   const applied = join(work, 'applied.log');
   const planArgs = join(work, 'plan-args.log');
-  for (const file of [summary, outputs, applied, planArgs]) {
+  const applyArgs = join(work, 'apply-args.log');
+  for (const file of [summary, outputs, applied, planArgs, applyArgs]) {
     writeFileSync(file, '');
   }
   const result = spawnSync('bash', [script, mode], {
@@ -66,6 +69,7 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
       AWS_ACCOUNT_ID: account,
       FAKE_LOG: applied,
       FAKE_PLAN_ARGS: planArgs,
+      FAKE_APPLY_ARGS: applyArgs,
       ...fakes,
     },
   });
@@ -77,6 +81,7 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
     outputs: readFileSync(outputs, 'utf8'),
     applied: readFileSync(applied, 'utf8'),
     planArgs: readFileSync(planArgs, 'utf8'),
+    applyArgs: readFileSync(applyArgs, 'utf8'),
   };
 }
 
@@ -145,6 +150,18 @@ describe('infra/run.sh plan', () => {
     }
   });
 
+  it.each(['plan', 'drift'])(
+    'runs a %s without the state lock, so a cancelled run leaves no lock behind',
+    (mode) => {
+      const lines = run(mode).planArgs.split('\n').filter(Boolean);
+      expect(lines).toHaveLength(2);
+      for (const line of lines) {
+        expect(line.split(' ')).toContain('-lock=false');
+        expect(line).not.toContain('-lock-timeout');
+      }
+    }
+  );
+
   it('leaves no plan file behind, because a plan holds secret values in plain text', () => {
     run('plan', { FAKE_HOST: '2' });
     const left = spawnSync('find', [join(work, 'infra'), '-name', '*.tfplan'], {
@@ -175,6 +192,13 @@ describe('infra/run.sh apply', () => {
     expect(result.stdout).toContain(
       'bootstrap: applied from the laptop only, so the pipeline leaves it'
     );
+  });
+
+  it('takes the state lock, and waits up to two minutes for it', () => {
+    const args = run('apply').applyArgs.split('\n').filter(Boolean);
+    expect(args).toHaveLength(1);
+    expect(args[0]?.split(' ')).toContain('-lock-timeout=120s');
+    expect(args[0]).not.toContain('-lock=false');
   });
 });
 
