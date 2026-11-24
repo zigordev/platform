@@ -25,3 +25,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0013](0013-a-first-boot-that-misses-its-setup-is-repaired-through-systems-manager.md) | A first boot that misses its setup is repaired through Systems Manager     | 2026-11-24 | accepted |
 | [0014](0014-cloudflare-holds-one-record-per-product-and-the-https-settings.md)         | Cloudflare holds one record per product, one route, and the HTTPS settings | 2026-11-24 | accepted |
 | [0015](0015-the-owner-stores-the-tunnels-token.md)                                     | The owner stores the tunnel's token                                        | 2026-11-24 | accepted |
+| [0016](0016-the-code-makes-grafanas-tokens-from-the-owners-one-token.md)               | The code makes Grafana's tokens from the owner's one token                 | 2026-11-24 | accepted |
