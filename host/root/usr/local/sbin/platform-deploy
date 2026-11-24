@@ -142,6 +142,13 @@ wait_for_setup() {
   done
 }
 
+read_socket_group() {
+  group="$(stat -c %g "$socket" 2> /dev/null || true)"
+  if ! valid '^[0-9]+$' "$group"; then
+    refuse busy "Docker's socket $socket is not there, so the group that may use it is unknown"
+  fi
+}
+
 take_lock() {
   mkdir -p "$lock_root"
   exec 9> "$lock_root/platform-deploy-$1.lock"
@@ -411,6 +418,7 @@ deploy() {
   local current current_commit current_images new_release code previous_commit previous_images
   local reason touched restored restore_code service
   wait_for_setup
+  read_socket_group
   take_lock "$target"
   current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
   current_commit="$(field "$current" .commit)"
@@ -481,6 +489,7 @@ deploy() {
 rollback() {
   local current current_commit previous_commit previous_images code
   wait_for_setup
+  read_socket_group
   take_lock "$target"
   current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
   current_commit="$(field "$current" .commit)"
@@ -546,6 +555,7 @@ redeploy_one() {
 
 redeploy_recorded() {
   local names record_name value failures=0 code
+  read_socket_group
   aws --region "$region" ssm get-parameters-by-path --path "$records" --output json > "$work/records.json" ||
     refuse unreachable "Parameter Store did not answer"
   names="$(jq -r --arg first "$records/$shared_target" \
@@ -613,8 +623,6 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-
-group="$(stat -c %g "$socket" 2> /dev/null || printf '0')"
 
 if [ -n "$redeploy" ]; then
   redeploy_recorded

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ -f "$FAKE_DIR/no-socket" ]; then
+  exit 1
+fi
 echo 988
