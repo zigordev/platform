@@ -29,7 +29,7 @@ services:
       traefik.http.services.alloy.loadbalancer.server.port: "12345"
 
   lgtm:
-    image: grafana/otel-lgtm:0.41.1
+    image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
     init: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -52,7 +52,7 @@ services:
     networks: [zigordev]
 
   mailpit:
-    image: axllent/mailpit:v1.34.0
+    image: axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
     user: "1000:1000"
     init: true
     read_only: true
@@ -78,7 +78,7 @@ services:
     networks: [zigordev]
 
   gcx:
-    image: grafana/gcx:v1.8.0
+    image: grafana/gcx:v1.8.0@sha256:58347c68228ebc5f36a86bfbdbe353c90aa9452cb961da40ec669e00c8361446
     profiles: [push]
     command: [resources, push, --path, /resources, --on-error, abort]
     user: "65532:65532"

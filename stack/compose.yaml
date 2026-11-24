@@ -2,7 +2,7 @@ name: platform
 
 services:
   docker-proxy:
-    image: wollomatic/socket-proxy:1.14.0
+    image: wollomatic/socket-proxy:1.14.0@sha256:fead157c4de4092461267092be49c993c2e6dd296a54c89ed04b8c870016b045
     command:
       - -loglevel=info
       - -logjson
@@ -29,7 +29,7 @@ services:
     networks: [docker]
 
   traefik:
-    image: traefik:v3.7.19
+    image: traefik:v3.7.19@sha256:a6c0194dda77bcb804824580f36fa7edc56e315b1acfe933366c8b52844a78a4
     user: "65532:65532"
     init: true
     read_only: true
@@ -66,7 +66,7 @@ services:
     networks: [zigordev, docker]
 
   alloy:
-    image: grafana/alloy:v1.22.0
+    image: grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189
     entrypoint:
       - sh
       - -c
