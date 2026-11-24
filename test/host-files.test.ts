@@ -77,6 +77,10 @@ describe('the files of the host', () => {
     expect(daemon['log-opts']).toEqual({ 'max-size': '10m', 'max-file': '5' });
   });
 
+  it('holds the generation of the host as a whole number, which a pull request raises to rebuild it on purpose', () => {
+    expect(readFileSync(join(root, 'etc/platform/generation'), 'utf8')).toMatch(/^[1-9]\d*\n$/);
+  });
+
   it('closes the SSH server, so a shell arrives through AWS Systems Manager only', () => {
     expect(setup).toContain('systemctl mask ssh.service ssh.socket');
   });

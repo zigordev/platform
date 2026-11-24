@@ -32,3 +32,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0020](0020-the-host-records-each-deployed-version-in-parameter-store.md)              | The host records each deployed version in Parameter Store                  | 2026-11-24 | accepted |
 | [0021](0021-outside-images-are-pinned-by-their-digest.md)                              | Outside images are pinned by their digest                                  | 2026-11-24 | accepted |
 | [0022](0022-plans-read-the-state-without-locking-it.md)                                | Plans read the state without locking it                                    | 2026-11-24 | accepted |
+| [0023](0023-the-host-is-rebuilt-on-purpose-by-raising-its-generation.md)               | The host is rebuilt on purpose by raising its generation                   | 2026-11-24 | accepted |
