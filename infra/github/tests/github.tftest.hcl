@@ -1,3 +1,7 @@
+variables {
+  adopt_existing = false
+}
+
 mock_provider "aws" {
   mock_data "aws_ssm_parameter" {
     defaults = {
@@ -140,8 +144,8 @@ run "a_repo_that_deploys_does_so_from_main_only_through_the_environment_producti
   command = plan
 
   assert {
-    condition     = keys(github_repository_environment.production) == ["platform"]
-    error_message = "Only a repo that deploys has the environment production. Today that is platform, for the shared services."
+    condition     = toset(keys(github_repository_environment.production)) == toset(["platform", "playground"])
+    error_message = "Only a repo that deploys has the environment production: platform for the shared services, and the playground."
   }
 
   assert {

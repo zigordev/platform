@@ -32,8 +32,8 @@ function digest(seed: string): string {
   return `sha256:${seed.repeat(64)}`;
 }
 
-const api = `ghcr.io/zigordev/hello-api@${digest('a')}`;
-const web = `ghcr.io/zigordev/hello-web@${digest('b')}`;
+const api = `ghcr.io/zigordev/playground-api@${digest('a')}`;
+const web = `ghcr.io/zigordev/playground-web@${digest('b')}`;
 const ours = `${api} ${web}`;
 const postgres = `postgres:18.7-alpine3.24@${digest('c')}`;
 const secret = 'key-that-must-never-show';
@@ -81,30 +81,30 @@ function configure(sha: string, config: unknown): void {
 
 function product(sha: string, options: { web?: boolean; postgres?: string } = {}): void {
   const services: Record<string, unknown> = {
-    'hello-postgres': {
+    'playground-postgres': {
       image: options.postgres ?? postgres,
       labels: { 'com.zigordev.backup': 'postgres' },
     },
-    'hello-api-migrate': {
-      image: `ghcr.io/zigordev/hello-api:${sha}`,
+    'playground-api-migrate': {
+      image: `ghcr.io/zigordev/playground-api:${sha}`,
       labels: { 'com.zigordev.job': 'migrate' },
     },
-    'hello-api': {
-      image: `ghcr.io/zigordev/hello-api:${sha}`,
+    'playground-api': {
+      image: `ghcr.io/zigordev/playground-api:${sha}`,
       labels: { 'traefik.enable': 'true' },
     },
   };
   if (options.web !== false) {
-    services['hello-web'] = {
-      image: `ghcr.io/zigordev/hello-web:${sha}`,
+    services['playground-web'] = {
+      image: `ghcr.io/zigordev/playground-web:${sha}`,
       labels: { 'traefik.enable': 'true' },
     };
   }
-  configure(sha, { name: 'hello', services });
+  configure(sha, { name: 'playground', services });
 }
 
 function release(): string {
-  const sha = commit('hello', '.', ['HELLO_API_KEYS', 'POSTGRES_PASSWORD']);
+  const sha = commit('playground', '.', ['PLAYGROUND_API_KEYS', 'POSTGRES_PASSWORD']);
   product(sha);
   return sha;
 }
@@ -115,11 +115,11 @@ function parameter(name: string, value: string): void {
   writeFileSync(file, value);
 }
 
-function recordFile(target = 'hello'): string {
+function recordFile(target = 'playground'): string {
   return join(work, 'aws', 'platform', 'deploy', target);
 }
 
-function record(target = 'hello'): Record<string, unknown> {
+function record(target = 'playground'): Record<string, unknown> {
   return JSON.parse(readFileSync(recordFile(target), 'utf8'));
 }
 
@@ -171,7 +171,7 @@ function runWith(extra: Record<string, string>, ...args: string[]) {
       PLATFORM_DOCKER_SOCKET: join(work, 'docker.sock'),
       FAKE_DIR: join(work, 'fake'),
       FAKE_AWS: join(work, 'aws'),
-      FAKE_SECRET_NAME: 'HELLO_API_KEYS',
+      FAKE_SECRET_NAME: 'PLAYGROUND_API_KEYS',
       PLATFORM_SETUP_MARKER: join(work, 'setup-done'),
       ...extra,
     },
@@ -189,9 +189,9 @@ function runWith(extra: Record<string, string>, ...args: string[]) {
 function deploy(sha: string, images = ours) {
   return run(
     '--target',
-    'hello',
+    'playground',
     '--repo',
-    'hello',
+    'playground',
     '--dir',
     '.',
     '--action',
@@ -206,9 +206,9 @@ function deploy(sha: string, images = ours) {
 function rollback(sha: string) {
   return run(
     '--target',
-    'hello',
+    'playground',
     '--repo',
-    'hello',
+    'playground',
     '--dir',
     '.',
     '--action',
@@ -227,9 +227,9 @@ beforeEach(() => {
   mkdirSync(join(work, 'run'));
   mkdirSync(join(work, 'fake'));
   writeFileSync(join(work, 'setup-done'), '2026-11-24T13:30:00Z\n');
-  repo('hello');
-  parameter('/hello/HELLO_API_KEYS', secret);
-  parameter('/hello/POSTGRES_PASSWORD', 'another-hidden-value');
+  repo('playground');
+  parameter('/playground/PLAYGROUND_API_KEYS', secret);
+  parameter('/playground/POSTGRES_PASSWORD', 'another-hidden-value');
 });
 
 afterEach(() => {
@@ -241,24 +241,24 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const first = release();
     const result = deploy(first);
     expect(result.last).toBe(
-      `platform-deploy: result=deployed target=hello commit=${first} previous=none`
+      `platform-deploy: result=deployed target=playground commit=${first} previous=none`
     );
     expect(result.code).toBe(0);
     expect(acts()).toEqual([
       `docker pull --quiet ${api}`,
-      `docker tag ${api} ghcr.io/zigordev/hello-api:${first}`,
+      `docker tag ${api} ghcr.io/zigordev/playground-api:${first}`,
       `docker pull --quiet ${web}`,
-      `docker tag ${web} ghcr.io/zigordev/hello-web:${first}`,
-      `compose:hello@${first} pull --quiet hello-postgres`,
-      `compose:hello@${first} up --detach --no-deps --wait --wait-timeout 180 hello-postgres`,
-      `compose:hello@${first} up --no-deps --force-recreate --exit-code-from hello-api-migrate hello-api-migrate`,
-      `compose:hello@${first} up --detach --no-deps --force-recreate --wait --wait-timeout 180 hello-api`,
-      `compose:hello@${first} up --detach --no-deps --force-recreate --wait --wait-timeout 180 hello-web`,
+      `docker tag ${web} ghcr.io/zigordev/playground-web:${first}`,
+      `compose:playground@${first} pull --quiet playground-postgres`,
+      `compose:playground@${first} up --detach --no-deps --wait --wait-timeout 180 playground-postgres`,
+      `compose:playground@${first} up --no-deps --force-recreate --exit-code-from playground-api-migrate playground-api-migrate`,
+      `compose:playground@${first} up --detach --no-deps --force-recreate --wait --wait-timeout 180 playground-api`,
+      `compose:playground@${first} up --detach --no-deps --force-recreate --wait --wait-timeout 180 playground-web`,
     ]);
     expect(record()).toMatchObject({
       commit: first,
       images: ours,
-      repo: 'hello',
+      repo: 'playground',
       dir: '.',
       previous: null,
     });
@@ -271,18 +271,18 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     forget();
     const result = deploy(second);
     expect(result.last).toBe(
-      `platform-deploy: result=deployed target=hello commit=${second} previous=${first}`
+      `platform-deploy: result=deployed target=playground commit=${second} previous=${first}`
     );
     expect(acts().filter((call) => call.startsWith('rollout:'))).toEqual([
-      `rollout:hello@${second} --timeout 180 hello-api`,
-      `rollout:hello@${second} --timeout 180 hello-web`,
+      `rollout:playground@${second} --timeout 180 playground-api`,
+      `rollout:playground@${second} --timeout 180 playground-web`,
     ]);
     const rollouts = calls().filter((call) => call.startsWith('docker rollout'));
     expect(rollouts).toHaveLength(2);
     for (const call of rollouts) {
       expect(call.match(/ --file /g)).toHaveLength(1);
       expect(call).toContain(`${join(work, 'run')}/platform-deploy.`);
-      expect(call).toContain(`/rendered-hello-${second}.yaml --timeout 180`);
+      expect(call).toContain(`/rendered-playground-${second}.yaml --timeout 180`);
     }
     expect(record()).toMatchObject({ commit: second, previous: { commit: first, images: ours } });
   });
@@ -294,20 +294,20 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     deploy(second);
     const again = deploy(second);
     expect(again.last).toBe(
-      `platform-deploy: result=deployed target=hello commit=${second} previous=${second}`
+      `platform-deploy: result=deployed target=playground commit=${second} previous=${second}`
     );
     expect(record()).toMatchObject({ commit: second, previous: { commit: first } });
   });
 
   it('refuses a commit that is not on main, before anything changes', () => {
     release();
-    const side = commit('hello', '.', ['HELLO_API_KEYS'], 'side');
-    git(join(work, 'clones', 'hello'), 'reset', '--quiet', '--hard', 'HEAD~1');
+    const side = commit('playground', '.', ['PLAYGROUND_API_KEYS'], 'side');
+    git(join(work, 'clones', 'playground'), 'reset', '--quiet', '--hard', 'HEAD~1');
     product(side);
     const result = deploy(side);
     expect(result.code).toBe(2);
     expect(result.last).toBe(
-      `platform-deploy: result=refused reason=not-on-main target=hello commit=${side}`
+      `platform-deploy: result=refused reason=not-on-main target=playground commit=${side}`
     );
     expect(acts()).toEqual([]);
     expect(existsSync(recordFile())).toBe(false);
@@ -322,19 +322,19 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const result = deploy(first);
     expect(result.code).toBe(0);
     expect(result.last).toBe(
-      `platform-deploy: result=skipped reason=overtaken target=hello commit=${first} current=${second}`
+      `platform-deploy: result=skipped reason=overtaken target=playground commit=${first} current=${second}`
     );
     expect(acts()).toEqual([]);
     expect(record()).toMatchObject({ commit: second });
   });
 
   it('refuses missing secrets by their names, before anything changes', () => {
-    rmSync(join(work, 'aws', 'hello', 'POSTGRES_PASSWORD'));
+    rmSync(join(work, 'aws', 'playground', 'POSTGRES_PASSWORD'));
     const first = release();
     const result = deploy(first);
     expect(result.code).toBe(2);
     expect(result.last).toBe(
-      `platform-deploy: result=refused reason=missing-secrets target=hello commit=${first}`
+      `platform-deploy: result=refused reason=missing-secrets target=playground commit=${first}`
     );
     expect(result.stdout).toContain(
       'These secrets are missing in Parameter Store: POSTGRES_PASSWORD'
@@ -366,19 +366,19 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const missing = deploy(first, api);
     expect(missing.code).toBe(2);
     expect(missing.last).toBe(
-      `platform-deploy: result=refused reason=unverified-image target=hello commit=${first}`
+      `platform-deploy: result=refused reason=unverified-image target=playground commit=${first}`
     );
     expect(missing.stdout).toContain(
-      `hello-web runs ghcr.io/zigordev/hello-web:${first}, and no verified digest of ghcr.io/zigordev/hello-web:${first} came with the command`
+      `playground-web runs ghcr.io/zigordev/playground-web:${first}, and no verified digest of ghcr.io/zigordev/playground-web:${first} came with the command`
     );
     product(first, { postgres: 'postgres:18.7-alpine3.24' });
     const loose = deploy(first);
     expect(loose.code).toBe(2);
     expect(loose.last).toBe(
-      `platform-deploy: result=refused reason=unpinned-image target=hello commit=${first}`
+      `platform-deploy: result=refused reason=unpinned-image target=playground commit=${first}`
     );
     expect(loose.stdout).toContain(
-      'hello-postgres runs postgres:18.7-alpine3.24, which is not pinned by its digest'
+      'playground-postgres runs postgres:18.7-alpine3.24, which is not pinned by its digest'
     );
     expect(acts()).toEqual([]);
   });
@@ -387,18 +387,18 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const first = release();
     deploy(first);
     const second = release();
-    fail('job-hello-api-migrate');
+    fail('job-playground-api-migrate');
     forget();
     const result = deploy(second);
     expect(result.code).toBe(1);
     expect(result.last).toBe(
-      `platform-deploy: result=failed reason=job target=hello commit=${second} restored=${first}`
+      `platform-deploy: result=failed reason=job target=playground commit=${second} restored=${first}`
     );
     expect(result.stdout).toContain('the migration failed');
     const after = acts();
     expect(after.some((call) => call.startsWith('rollout:'))).toBe(false);
     expect(after.at(-1)).toBe(
-      `compose:hello@${first} up --detach --no-deps --wait --wait-timeout 180 hello-postgres`
+      `compose:playground@${first} up --detach --no-deps --wait --wait-timeout 180 playground-postgres`
     );
     expect(record()).toMatchObject({ commit: first });
   });
@@ -407,17 +407,17 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const first = release();
     deploy(first);
     const second = release();
-    fail('rollout-hello-web');
+    fail('rollout-playground-web');
     forget();
     const result = deploy(second);
     expect(result.code).toBe(1);
     expect(result.last).toBe(
-      `platform-deploy: result=failed reason=health target=hello commit=${second} restored=${first}`
+      `platform-deploy: result=failed reason=health target=playground commit=${second} restored=${first}`
     );
     expect(acts().filter((call) => call.startsWith('rollout:'))).toEqual([
-      `rollout:hello@${second} --timeout 180 hello-api`,
-      `rollout:hello@${second} --timeout 180 hello-web`,
-      `rollout:hello@${first} --timeout 180 hello-api`,
+      `rollout:playground@${second} --timeout 180 playground-api`,
+      `rollout:playground@${second} --timeout 180 playground-web`,
+      `rollout:playground@${first} --timeout 180 playground-api`,
     ]);
     expect(result.lines.length).toBeLessThan(80);
     expect(result.stdout).toContain('log line 499 of the new container');
@@ -427,15 +427,15 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
 
   it('removes what a failed first deploy started', () => {
     const first = release();
-    fail('up-hello-web');
+    fail('up-playground-web');
     const result = deploy(first);
     expect(result.code).toBe(1);
     expect(result.last).toBe(
-      `platform-deploy: result=failed reason=health target=hello commit=${first} restored=none`
+      `platform-deploy: result=failed reason=health target=playground commit=${first} restored=none`
     );
     expect(acts().filter((call) => call.includes(' rm '))).toEqual([
-      `compose:hello@${first} rm --stop --force hello-api`,
-      `compose:hello@${first} rm --stop --force hello-web`,
+      `compose:playground@${first} rm --stop --force playground-api`,
+      `compose:playground@${first} rm --stop --force playground-web`,
     ]);
     expect(existsSync(recordFile())).toBe(false);
   });
@@ -443,12 +443,12 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
   it('removes a service that the compose files no longer hold', () => {
     const first = release();
     deploy(first);
-    const second = commit('hello', '.', ['HELLO_API_KEYS', 'POSTGRES_PASSWORD']);
+    const second = commit('playground', '.', ['PLAYGROUND_API_KEYS', 'POSTGRES_PASSWORD']);
     product(second, { web: false });
     forget();
     const result = deploy(second);
     expect(result.code).toBe(0);
-    const old = `id-hello-web-${first.slice(0, 7)}`;
+    const old = `id-playground-web-${first.slice(0, 7)}`;
     expect(acts().filter((call) => /^docker (stop|rm) /.test(call))).toEqual([
       `docker stop ${old}`,
       `docker rm ${old}`,
@@ -464,12 +464,12 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const result = rollback(second);
     expect(result.code).toBe(0);
     expect(result.last).toBe(
-      `platform-deploy: result=rolled-back target=hello commit=${first} from=${second}`
+      `platform-deploy: result=rolled-back target=playground commit=${first} from=${second}`
     );
     const after = acts();
     expect(after.filter((call) => call.startsWith('rollout:'))).toEqual([
-      `rollout:hello@${first} --timeout 180 hello-api`,
-      `rollout:hello@${first} --timeout 180 hello-web`,
+      `rollout:playground@${first} --timeout 180 playground-api`,
+      `rollout:playground@${first} --timeout 180 playground-web`,
     ]);
     expect(after.some((call) => call.includes('--exit-code-from'))).toBe(false);
     expect(record()).toMatchObject({ commit: first, images: ours, previous: null });
@@ -480,12 +480,12 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     deploy(first);
     const other = release();
     expect(rollback(other).last).toBe(
-      `platform-deploy: result=refused reason=not-current target=hello commit=${other}`
+      `platform-deploy: result=refused reason=not-current target=playground commit=${other}`
     );
     const none = rollback(first);
     expect(none.code).toBe(2);
     expect(none.last).toBe(
-      `platform-deploy: result=refused reason=no-previous target=hello commit=${first}`
+      `platform-deploy: result=refused reason=no-previous target=playground commit=${first}`
     );
   });
 
@@ -502,8 +502,8 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     parameter('/platform/CLOUDFLARE_TUNNEL_TOKEN', 'tunnel-token-value');
     const first = release();
     parameter(
-      '/platform/deploy/hello',
-      JSON.stringify({ commit: first, images: ours, repo: 'hello', dir: '.', previous: null })
+      '/platform/deploy/playground',
+      JSON.stringify({ commit: first, images: ours, repo: 'playground', dir: '.', previous: null })
     );
     parameter(
       '/platform/deploy/platform',
@@ -513,7 +513,7 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     expect(result.code).toBe(0);
     expect(results(result.lines)).toEqual([
       `platform-deploy: result=redeployed target=platform commit=${shared}`,
-      `platform-deploy: result=redeployed target=hello commit=${first}`,
+      `platform-deploy: result=redeployed target=playground commit=${first}`,
     ]);
     expect(acts()).toContain(
       `compose:platform@${shared} up --detach --no-deps --wait --wait-timeout 180 docker-proxy traefik`
@@ -522,7 +522,7 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     expect(again.code).toBe(0);
     expect(results(again.lines)).toEqual([
       `platform-deploy: result=skipped reason=present target=platform commit=${shared}`,
-      `platform-deploy: result=skipped reason=present target=hello commit=${first}`,
+      `platform-deploy: result=skipped reason=present target=playground commit=${first}`,
     ]);
   });
 
@@ -544,16 +544,24 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     ['an unknown action', ['--action', 'destroy', '--commit', unknown]],
     ['a rollback with images', ['--action', 'rollback', '--commit', unknown, '--images', api]],
   ])('refuses %s before it takes the lock or calls anything', (_, args) => {
-    const result = run('--target', 'hello', '--repo', 'hello', '--dir', '.', ...args);
+    const result = run('--target', 'playground', '--repo', 'playground', '--dir', '.', ...args);
     expect(result.code).toBe(2);
-    expect(result.last).toMatch(/^platform-deploy: result=refused reason=bad-input target=hello /);
+    expect(result.last).toMatch(
+      /^platform-deploy: result=refused reason=bad-input target=playground /
+    );
     expect(calls()).toEqual([]);
     expect(existsSync(join(work, 'fake', 'aws-calls'))).toBe(false);
   });
 
   it.each([
-    ['a folder outside the repo', ['--target', 'hello', '--repo', 'hello', '--dir', '../etc']],
-    ['a target that is not a name', ['--target', 'Hello World', '--repo', 'hello', '--dir', '.']],
+    [
+      'a folder outside the repo',
+      ['--target', 'playground', '--repo', 'playground', '--dir', '../etc'],
+    ],
+    [
+      'a target that is not a name',
+      ['--target', 'Play Ground', '--repo', 'playground', '--dir', '.'],
+    ],
     ['an unknown argument', ['--force']],
   ])('refuses %s', (_, args) => {
     const result = run(...args, '--action', 'deploy', '--commit', unknown);
@@ -576,9 +584,9 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const result = runWith(
       { PLATFORM_DEPLOY_SETUP_WAIT: '0' },
       '--target',
-      'hello',
+      'playground',
       '--repo',
-      'hello',
+      'playground',
       '--dir',
       '.',
       '--action',
@@ -590,7 +598,7 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     );
     expect(result.code).toBe(2);
     expect(result.last).toBe(
-      `platform-deploy: result=refused reason=busy target=hello commit=${first}`
+      `platform-deploy: result=refused reason=busy target=playground commit=${first}`
     );
     expect(result.stdout).toContain("The host's first-boot setup did not finish within 0 seconds");
     expect(existsSync(join(work, 'fake', 'aws-calls'))).toBe(false);
@@ -602,33 +610,33 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     const result = deploy(first);
     expect(result.code).toBe(2);
     expect(result.last).toBe(
-      `platform-deploy: result=refused reason=busy target=hello commit=${first}`
+      `platform-deploy: result=refused reason=busy target=playground commit=${first}`
     );
   });
 
   it('refuses when GitHub or Parameter Store does not answer', () => {
     const first = release();
-    rmSync(join(work, 'remote', 'hello.git'), { recursive: true });
+    rmSync(join(work, 'remote', 'playground.git'), { recursive: true });
     const github = deploy(first);
     expect(github.code).toBe(2);
     expect(github.last).toBe(
-      `platform-deploy: result=refused reason=unreachable target=hello commit=${first}`
+      `platform-deploy: result=refused reason=unreachable target=playground commit=${first}`
     );
     fail('aws');
     const store = deploy(first);
     expect(store.code).toBe(2);
     expect(store.last).toBe(
-      `platform-deploy: result=refused reason=unreachable target=hello commit=${first}`
+      `platform-deploy: result=refused reason=unreachable target=playground commit=${first}`
     );
   });
 
   it('still ends with a result when something unexpected stops it', () => {
     const first = release();
-    parameter('/platform/deploy/hello', 'not json');
+    parameter('/platform/deploy/playground', 'not json');
     const result = deploy(first);
     expect(result.code).not.toBe(0);
     expect(result.last).toBe(
-      `platform-deploy: result=failed reason=unexpected target=hello commit=${first}`
+      `platform-deploy: result=failed reason=unexpected target=playground commit=${first}`
     );
   });
 });

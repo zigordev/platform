@@ -28,12 +28,12 @@ Everything else comes from here, with no line of setup in the product:
 
 With the shared services running, an app is served when its compose file does four things.
 
-| The app                                  | With                                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Joins the platform's network             | `networks: [zigordev]` on the service, and `zigordev` named as an external network                                 |
-| Asks for a route                         | The labels `traefik.enable: "true"`, a router rule such as ``Host(`hello.localhost`)``, and the port it listens on |
-| Has a health check                       | `healthcheck`. The ingress sends no request to a container before its check passes                                 |
-| Sends its telemetry and its mail by name | `OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318`, and `mailpit` on port 1025 as its SMTP server                    |
+| The app                                  | With                                                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Joins the platform's network             | `networks: [zigordev]` on the service, and `zigordev` named as an external network                                      |
+| Asks for a route                         | The labels `traefik.enable: "true"`, a router rule such as ``Host(`playground.localhost`)``, and the port it listens on |
+| Has a health check                       | `healthcheck`. The ingress sends no request to a container before its check passes                                      |
+| Sends its telemetry and its mail by name | `OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318`, and `mailpit` on port 1025 as its SMTP server                         |
 
 Its log lines need nothing: the agent reads them from Docker and names them by the app's service name.
 

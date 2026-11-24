@@ -1,6 +1,10 @@
 {
-  "hello": {
-    "description": "The test page that step 3.9 deploys",
-    "live": false
+  "playground": {
+    "description": "The test app of step 3.9: the whole product template, public",
+    "live": false,
+    "deploy": {
+      "repo": "playground",
+      "repoId": 1470249518
+    }
   }
 }

@@ -24,6 +24,10 @@ locals {
       description = "The infrastructure and the shared services of every zigordev product: the ingress, telemetry, dashboards, alerts, backups and runbooks"
       deploys     = true
     }
+    playground = {
+      description = "The test app of step 3.9: the whole product template, deployed from every merge to main"
+      deploys     = true
+    }
   }
 
   required_check = {

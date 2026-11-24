@@ -112,21 +112,21 @@ run "a_live_product_is_checked_every_5_minutes_from_two_places" {
   }
 
   assert {
-    condition     = toset(keys(grafana_synthetic_monitoring_check.health)) == toset(["hello"])
+    condition     = toset(keys(grafana_synthetic_monitoring_check.health)) == toset(["playground"])
     error_message = "Only the live product is checked."
   }
 
   assert {
     condition = (
-      grafana_synthetic_monitoring_check.health["hello"].target == "https://hello.zigordev.com/health" &&
-      grafana_synthetic_monitoring_check.health["hello"].frequency == 300000 &&
-      grafana_synthetic_monitoring_check.health["hello"].probes == toset([1, 2])
+      grafana_synthetic_monitoring_check.health["playground"].target == "https://playground.zigordev.com/health" &&
+      grafana_synthetic_monitoring_check.health["playground"].frequency == 300000 &&
+      grafana_synthetic_monitoring_check.health["playground"].probes == toset([1, 2])
     )
     error_message = "The check calls /health over https every 5 minutes, from Frankfurt and London."
   }
 
   assert {
-    condition     = one(one(grafana_synthetic_monitoring_check.health["hello"].settings).http).fail_if_not_ssl
+    condition     = one(one(grafana_synthetic_monitoring_check.health["playground"].settings).http).fail_if_not_ssl
     error_message = "A product that answers without TLS fails its check."
   }
 }
