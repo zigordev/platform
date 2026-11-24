@@ -10,6 +10,12 @@ mock_provider "aws" {
       id = "vol-0123456789abcdef0"
     }
   }
+
+  mock_resource "aws_ssm_document" {
+    defaults = {
+      default_version = "1"
+    }
+  }
 }
 
 run "the_host_is_a_t4g_small_whose_cpu_credits_are_capped" {
@@ -179,5 +185,34 @@ run "the_user_data_writes_every_host_file_and_runs_the_setup" {
   assert {
     condition     = local.cloud_config.runcmd == [["/usr/local/sbin/platform-setup"]]
     error_message = "The first boot runs the setup script, and only that."
+  }
+}
+
+run "a_first_boot_that_missed_its_setup_is_repaired_through_systems_manager" {
+  command = plan
+
+  assert {
+    condition     = aws_ssm_association.repair_first_boot.targets[0].key == "tag:Name" && aws_ssm_association.repair_first_boot.targets[0].values == tolist([aws_instance.host.tags.Name])
+    error_message = "The repair finds the host by its name tag, so a rebuilt host gets it too."
+  }
+
+  assert {
+    condition     = aws_ssm_association.repair_first_boot.schedule_expression == "rate(30 minutes)"
+    error_message = "The repair checks every 30 minutes, the shortest interval State Manager allows."
+  }
+
+  assert {
+    condition     = aws_ssm_document.repair_first_boot.document_type == "Command" && aws_ssm_association.repair_first_boot.name == aws_ssm_document.repair_first_boot.name
+    error_message = "The association runs the repair's own command document."
+  }
+
+  assert {
+    condition     = jsondecode(aws_ssm_document.repair_first_boot.content).mainSteps[0].inputs.runCommand == local.repair_first_boot
+    error_message = "The document runs exactly the lines of host/repair-first-boot."
+  }
+
+  assert {
+    condition     = local.repair_first_boot[0] == "set -eu" && !anytrue([for line in local.repair_first_boot : startswith(line, "#!")])
+    error_message = "The document runs the script under sh without its first line, and stops at the first error."
   }
 }
