@@ -229,6 +229,55 @@ Measured against AWS's own price list for Ireland on 2026-11-23, for a month of 
 
 So the host costs $6.29 a month until 2026-12-31, and $19.72 a month from 2027-01-01, unless AWS extends its free trial again. The trial does not cover surplus processor credits, which the capped credits rule out.
 
+## Cloudflare
+
+`zigordev.com` lives on Cloudflare's free plan, and the stack `infra/cloudflare` holds all of it. It is step 3.5 of the build plan, and [record 0014](adr/0014-cloudflare-holds-one-record-per-product-and-the-https-settings.md) says why it is shaped this way.
+
+### What it holds
+
+| Part                       | What it is                                                                                                                                                                                                                                      |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The tunnel `platform-host` | A connection that the host opens to Cloudflare, so visitors reach the host with no port open. Cloudflare holds its configuration: one route sends every `*.zigordev.com` name to Traefik at `http://traefik:8080`, and anything else gets a 404 |
+| One record per product     | `<product>.zigordev.com`, a proxied CNAME to the tunnel, made from `local.products` in `infra/cloudflare/locals.tf`. It holds `hello`, the test page of step 3.9                                                                                |
+| The mail records           | SPF `v=spf1 -all` names no sender, and DMARC `p=reject; sp=reject` asks every receiver to reject mail that claims the domain. They change when SES sends, in phase 5                                                                            |
+| The HTTPS settings         | Always Use HTTPS, automatic HTTPS rewrites, and TLS 1.2 at least                                                                                                                                                                                |
+
+### The two tokens
+
+Both are SecureStrings in Parameter Store, and only the owner stores them, with a command that shows nothing.
+
+| Token                | Name                                | What it is                                                                                                                                                                                                |
+| -------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The Cloudflare token | `/platform/CLOUDFLARE_API_TOKEN`    | An account API token with four permissions: Cloudflare One Connector: cloudflared, Edit, on the account, and DNS, Edit, Zone, Read and Zone Settings, Edit, on `zigordev.com`. The stack signs in with it |
+| The tunnel's token   | `/platform/CLOUDFLARE_TUNNEL_TOKEN` | What `cloudflared` on the host signs in with, from step 3.7. The code never reads it. [Record 0015](adr/0015-the-owner-stores-the-tunnels-token.md) says why                                              |
+
+To store a token, copy it in Cloudflare's dashboard, then run this on the laptop with that token's name. It waits silently for the paste and Enter:
+
+```bash
+read -rs TOKEN && aws ssm put-parameter --profile platform-ops --region eu-west-1 --name /platform/CLOUDFLARE_TUNNEL_TOKEN --type SecureString --overwrite --value "$TOKEN"; unset TOKEN
+```
+
+The tunnel's token is in the dashboard under Zero Trust, then Networks: open the tunnel `platform-host`, and copy the token from the install command that its connector page shows.
+
+### How a product gets its address
+
+Once the owner has said yes to a product, its address is one entry in `local.products`. The plan shows one new record, and the tunnel needs no change, because Traefik routes the name by the labels that the product's containers carry.
+
+### How to check it
+
+| Command                               | What it shows                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------- |
+| `dig +short NS zigordev.com`          | Cloudflare's two name servers                                               |
+| `dig +short hello.zigordev.com`       | Cloudflare's addresses: the test page's address resolves                    |
+| `dig +short TXT zigordev.com`         | The SPF record                                                              |
+| `dig +short TXT _dmarc.zigordev.com`  | The DMARC record                                                            |
+| `curl -sI http://hello.zigordev.com`  | A redirect to `https://`                                                    |
+| `curl -sI https://hello.zigordev.com` | Cloudflare's error 1033 until `cloudflared` runs on the host, from step 3.7 |
+
+### What Cloudflare costs
+
+Nothing. The free plan holds the DNS, the proxy with its certificate, the tunnel and these settings. Cloudflare's docs list tunnels as "Available on all plans".
+
 ## The settings on GitHub
 
 They were set by hand when the repo was created, on 2026-11-22, as a copy of the settings of `toolkit`. Since step 3.3 of the build plan they are code in `infra/github`, for `toolkit` and `platform` alike, and a change reaches them like any other stack: a plan in the pull request, an apply after the owner's approval. The table names the few that stay outside that stack.
@@ -269,6 +318,8 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | A new repo                                         | Creating it waits for the owner. Then it is one more entry in `local.repos` in `infra/github/locals.tf`, and the app reaches it, because it is installed on all repos                                                                                                                                                                 |
 | The host does not show in Systems Manager          | Its first boot failed before the agent started, or the role is missing. Read the boot's output without a shell: `aws ec2 get-console-output --profile platform-ops --region eu-west-1 --latest --output text --instance-id <id>`. A host that cannot be reached is rebuilt: a pull request that changes `host/root` replaces it       |
 | The repair gave up after 3 restarts                | The association's history shows it: Systems Manager, then State Manager, then `platform-host-repair-first-boot`, then Execution history. In a shell, `cloud-init status --long` and `/var/log/cloud-init.log` say why the first boot found no setup. Once the cause is fixed in code, the rebuild starts the count again              |
+| The plan of `cloudflare` fails to sign in          | Cloudflare refuses the token, most often with "Invalid access token". The owner makes a new account API token with the four permissions under "The two tokens", and stores it with the same command                                                                                                                                   |
+| A product's address answers with error 1033        | The tunnel has no connector: `cloudflared` on the host is down, or has no token. From step 3.7 the host's logs say which                                                                                                                                                                                                              |
 | Docker does not start on the host                  | The data disk is missing, or `platform-data-disk.service` refused to touch it. `systemctl status platform-data-disk.service` says which. A disk that holds unknown data is never formatted: find out what is on it before anything else                                                                                               |
 | The data disk is filling up                        | Raise `local.data_disk.size_gb` in `infra/host/locals.tf` through a pull request. After the apply, run `sudo resize2fs /dev/disk/by-label/platform-data` in a shell. The disk grows while the host runs                                                                                                                               |
 | Docker has a new major version                     | Wait a month after its release, then move the pin in `host/root/etc/apt/preferences.d/docker` through a pull request, which rebuilds the host                                                                                                                                                                                         |
