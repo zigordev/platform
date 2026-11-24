@@ -24,4 +24,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0012](0012-the-host-restarts-itself-at-night-when-an-update-needs-it.md)              | The host restarts itself at night when an update needs it                  | 2026-11-23 | accepted |
 | [0013](0013-a-first-boot-that-misses-its-setup-is-repaired-through-systems-manager.md) | A first boot that misses its setup is repaired through Systems Manager     | 2026-11-24 | accepted |
 | [0014](0014-cloudflare-holds-one-record-per-product-and-the-https-settings.md)         | Cloudflare holds one record per product, one route, and the HTTPS settings | 2026-11-24 | accepted |
-| [0015](0015-the-owner-stores-the-tunnels-token.md)                                     | The owner stores the tunnel's token                                        | 2026-11-24 | proposed |
+| [0015](0015-the-owner-stores-the-tunnels-token.md)                                     | The owner stores the tunnel's token                                        | 2026-11-24 | accepted |

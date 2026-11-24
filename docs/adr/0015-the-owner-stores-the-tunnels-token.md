@@ -1,6 +1,6 @@
 # 0015. The owner stores the tunnel's token
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-24
 - Supersedes: none
 
@@ -11,6 +11,8 @@ The Cloudflare tunnel connects the host to Cloudflare. Its connector, `cloudflar
 `infra/cloudflare` creates the tunnel with its configuration held by Cloudflare. Cloudflare then creates the tunnel's secret itself. The provider could read the token through a data source, `cloudflare_zero_trust_tunnel_cloudflared_token`, and the code could store it in Parameter Store. The token would then sit in the OpenTofu state, which the plan job of every pull request from a branch of this repo can read.
 
 The pre-steps of the plan say: "You store every secret yourself, with a command that reads it without showing it, so I never see a value." The core rules add that a session never sets a secret.
+
+On 2026-11-24 the owner accepted this record by answering "Merge" to the question whether to merge platform#29, which accepts record 0015.
 
 ## Decision
 
