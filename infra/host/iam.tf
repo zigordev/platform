@@ -1,6 +1,6 @@
 resource "aws_iam_role" "host" {
   name        = local.host.name
-  description = "The host's own role: AWS Systems Manager reaches the host through it. It reads no parameter"
+  description = "The host's own role: AWS Systems Manager reaches the host through it. infra/deploy adds the secrets a deploy reads and the records it keeps"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

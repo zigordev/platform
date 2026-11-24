@@ -1,0 +1,631 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -f
+
+state_root="${PLATFORM_DEPLOY_STATE:-/var/lib/platform/deploy}"
+run_root="${PLATFORM_DEPLOY_RUN:-/run}"
+lock_root="${PLATFORM_DEPLOY_LOCKS:-/run/lock}"
+git_base="${PLATFORM_GIT_BASE:-https://github.com/zigordev}"
+records="${PLATFORM_DEPLOY_RECORDS:-/platform/deploy}"
+socket="${PLATFORM_DOCKER_SOCKET:-/var/run/docker.sock}"
+health_timeout="${PLATFORM_DEPLOY_HEALTH_TIMEOUT:-180}"
+lock_timeout="${PLATFORM_DEPLOY_LOCK_TIMEOUT:-840}"
+region="${PLATFORM_AWS_REGION:-eu-west-1}"
+shared_target="platform"
+
+export HOME="${HOME:-/root}"
+export PATH="$PATH:/snap/bin"
+
+name_pattern='^[a-z][a-z0-9-]*$'
+repo_pattern='^[a-z0-9][a-z0-9._-]*$'
+dir_pattern='^(\.|[a-z0-9][a-z0-9_-]*(/[a-z0-9][a-z0-9_-]*)*)$'
+commit_pattern='^[0-9a-f]{40}$'
+image_pattern='^ghcr\.io/zigordev/[a-z0-9][a-z0-9-]*@sha256:[0-9a-f]{64}$'
+
+target=""
+repo=""
+dir=""
+action=""
+commit=""
+images=""
+redeploy=""
+reported=""
+group=""
+rel=""
+
+work="$(mktemp -d "$run_root/platform-deploy.XXXXXX")"
+export TMPDIR="$work"
+
+say() {
+  printf '%s\n' "$*"
+}
+
+report() {
+  reported="yes"
+  say "platform-deploy: $*"
+}
+
+finish() {
+  local code=$?
+  if [ -z "$reported" ]; then
+    say "platform-deploy: result=failed reason=unexpected target=${target:-none} commit=${commit:-none}"
+    if [ "$code" -eq 0 ]; then
+      code=1
+    fi
+  fi
+  rm -rf "$work"
+  exit "$code"
+}
+trap finish EXIT
+
+refuse() {
+  local reason="$1"
+  shift
+  if [ $# -gt 0 ]; then
+    say "$*"
+  fi
+  report "result=refused reason=$reason target=${target:-none} commit=${commit:-none}"
+  exit 2
+}
+
+step() {
+  local title="$1" code=0
+  shift
+  say "$title"
+  "$@" > "$work/step.log" 2>&1 || code=$?
+  if [ "$code" -ne 0 ]; then
+    say "  It failed with exit code $code. Its last lines:"
+    tail -n 40 "$work/step.log" | sed 's/^/    /'
+  fi
+  return "$code"
+}
+
+valid() {
+  [[ "$2" =~ $1 ]]
+}
+
+valid_images() {
+  local ref
+  for ref in $1; do
+    valid "$image_pattern" "$ref" || return 1
+  done
+}
+
+listed() {
+  case " $(echo $1) " in
+    *" $2 "*) return 0 ;;
+  esac
+  return 1
+}
+
+has_digest() {
+  case " $1 " in
+    *" ghcr.io/zigordev/$2@sha256:"*) return 0 ;;
+  esac
+  return 1
+}
+
+field() {
+  if [ -n "$1" ]; then
+    printf '%s' "$1" | jq -r "$2 // empty"
+  fi
+}
+
+read_record() {
+  local code=0
+  aws --region "$region" ssm get-parameter --name "$records/$1" --query Parameter.Value --output text \
+    > "$work/record" 2> "$work/record.err" || code=$?
+  if [ "$code" -eq 0 ]; then
+    cat "$work/record"
+  elif ! grep -q ParameterNotFound "$work/record.err"; then
+    cat "$work/record.err" >&2
+    return 1
+  fi
+}
+
+write_record() {
+  local value
+  value="$(jq -cn --arg commit "$2" --arg images "$3" --arg repo "$repo" --arg dir "$dir" \
+    --arg previous "$4" --arg previous_images "$5" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{commit: $commit, images: $images, repo: $repo, dir: $dir,
+      previous: (if $previous == "" then null else {commit: $previous, images: $previous_images} end),
+      deployedAt: $at}')"
+  aws --region "$region" ssm put-parameter --name "$records/$1" --type String --overwrite --value "$value" > /dev/null
+}
+
+take_lock() {
+  mkdir -p "$lock_root"
+  exec 9> "$lock_root/platform-deploy-$1.lock"
+  if ! flock --wait "$lock_timeout" 9; then
+    refuse busy "Another deploy of $1 held its lock for $lock_timeout seconds"
+  fi
+}
+
+repo_git() {
+  printf '%s/%s/repo.git' "$state_root" "$1"
+}
+
+fetch_main() {
+  local git_dir
+  git_dir="$(repo_git "$1")"
+  if [ ! -d "$git_dir" ]; then
+    mkdir -p "$state_root/$1" || return 1
+    git -c init.defaultBranch=main init --quiet --bare "$git_dir" || return 1
+  fi
+  git -C "$git_dir" fetch --quiet --no-tags "$git_base/$2.git" '+refs/heads/main:refs/heads/main'
+}
+
+is_ancestor() {
+  git -C "$(repo_git "$1")" merge-base --is-ancestor "$2" "$3" 2> /dev/null
+}
+
+prepare_release() {
+  local name path
+  rel="$state_root/$1/releases/$3"
+  if [ -f "$rel/.complete" ]; then
+    return 0
+  fi
+  rm -rf "$rel"
+  mkdir -p "$rel"
+  for name in compose.yaml compose.production.yaml .env.production.example; do
+    path="$name"
+    if [ "$2" != "." ]; then
+      path="$2/$name"
+    fi
+    if ! git -C "$(repo_git "$1")" show "$3:$path" > "$rel/$name" 2> /dev/null; then
+      say "$path is missing at $3"
+      return 1
+    fi
+  done
+  : > "$rel/.complete"
+}
+
+prune_releases() {
+  local base="$state_root/$1/releases" old
+  for old in $(ls -1t "$base" | tail -n +6); do
+    if [ "$old" != "$2" ] && [ "$old" != "$3" ]; then
+      rm -rf "${base:?}/$old"
+    fi
+  done
+}
+
+secret_names() {
+  sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*$/\1/p' "$1/.env.production.example"
+}
+
+release_compose() {
+  local name="$1" folder="$2"
+  shift 2
+  docker compose --project-name "$name" --file "$folder/compose.yaml" --file "$folder/compose.production.yaml" "$@"
+}
+
+rendered_compose() {
+  local name="$1" file="$2"
+  shift 2
+  docker compose --project-name "$name" --file "$file" "$@"
+}
+
+rendered_file() {
+  printf '%s/rendered-%s-%s.yaml' "$work" "$1" "$2"
+}
+
+inspect_release() {
+  local name="$1" folder="$2" version="$3" list="$4" secret service image kind app
+  for secret in $(secret_names "$folder"); do
+    case "$secret" in
+      VERSION | DOCKER_SOCKET_GROUP | PATH | HOME | TMPDIR | AWS_*)
+        say "$secret is a name the host sets itself, so it cannot name a secret"
+        printf 'bad-input\n' > "$work/reason"
+        return 2
+        ;;
+    esac
+  done
+  if ! (
+    export VERSION="$version" DOCKER_SOCKET_GROUP="$group"
+    for secret in $(secret_names "$folder"); do
+      export "$secret=placeholder"
+    done
+    release_compose "$name" "$folder" config --format json
+  ) > "$work/config.json" 2> "$work/config.err"; then
+    say "The compose files of $version do not load. Their last lines of output:"
+    tail -n 20 "$work/config.err" | sed 's/^/    /'
+    printf 'bad-input\n' > "$work/reason"
+    return 2
+  fi
+  jq -r '.services | to_entries[] | (.value.labels // {}) as $labels |
+    "\(.key)|\(.value.image // "")|\(if $labels | has("com.zigordev.job") then "job"
+      elif $labels["traefik.enable"] == "true" then "roll" else "start" end)"' \
+    "$work/config.json" > "$work/services"
+  while IFS='|' read -r service image kind; do
+    case "$image" in
+      ghcr.io/zigordev/*)
+        app="${image#ghcr.io/zigordev/}"
+        app="${app%%[:@]*}"
+        if [ "$image" != "ghcr.io/zigordev/$app:$version" ] || ! has_digest "$list" "$app"; then
+          say "$service runs $image, and no verified digest of ghcr.io/zigordev/$app:$version came with the command"
+          printf 'unverified-image\n' > "$work/reason"
+          return 2
+        fi
+        ;;
+      *@sha256:*) ;;
+      *)
+        say "$service runs $image, which is not pinned by its digest"
+        printf 'unpinned-image\n' > "$work/reason"
+        return 2
+        ;;
+    esac
+  done < "$work/services"
+}
+
+fetch_secrets() {
+  aws --region "$region" ssm get-parameters --with-decryption --names "$@" --output json > "$work/batch.json" || return 1
+  jq -r '.Parameters[] | "\(.Name)|\(.Value | @base64)"' "$work/batch.json" >> "$work/secrets"
+  jq -r '.InvalidParameters[]' "$work/batch.json" >> "$work/missing"
+  rm -f "$work/batch.json"
+}
+
+load_secrets() {
+  local name="$1" folder="$2" secret batch="" count=0 full encoded
+  : > "$work/secrets"
+  : > "$work/missing"
+  for secret in $(secret_names "$folder"); do
+    batch="$batch /$name/$secret"
+    count=$((count + 1))
+    if [ "$count" -eq 10 ]; then
+      fetch_secrets $batch || return 1
+      batch=""
+      count=0
+    fi
+  done
+  if [ -n "$batch" ]; then
+    fetch_secrets $batch || return 1
+  fi
+  if [ -s "$work/missing" ]; then
+    rm -f "$work/secrets"
+    say "These secrets are missing in Parameter Store: $(sed "s|^.*/||" "$work/missing" | tr '\n' ' ')"
+    return 2
+  fi
+  while IFS='|' read -r full encoded; do
+    export "${full##*/}=$(printf '%s' "$encoded" | base64 --decode)"
+  done < "$work/secrets"
+  rm -f "$work/secrets"
+}
+
+services_of() {
+  awk -F'|' -v kind="$1" '$3 == kind { print $1 }' "$work/services"
+}
+
+pin_images() {
+  local ref app
+  for ref in $1; do
+    app="${ref#ghcr.io/zigordev/}"
+    app="${app%%@*}"
+    docker pull --quiet "$ref" || return 1
+    docker tag "$ref" "ghcr.io/zigordev/$app:$2" || return 1
+  done
+}
+
+remove_stopped() {
+  local ids
+  ids="$(docker ps --all --quiet --filter "label=com.docker.compose.project=$1" \
+    --filter "label=com.docker.compose.service=$2" --filter status=exited --filter status=created --filter status=dead)"
+  if [ -n "$ids" ]; then
+    docker rm $ids > /dev/null
+  fi
+}
+
+stop_and_remove() {
+  docker stop "$@" || return 1
+  docker rm "$@"
+}
+
+remove_orphans() {
+  local service ids
+  for service in $(docker ps --all --filter "label=com.docker.compose.project=$1" \
+    --format '{{.Label "com.docker.compose.service"}}' | sort -u); do
+    if awk -F'|' -v name="$service" '$1 == name { found = 1 } END { exit !found }' "$work/services"; then
+      continue
+    fi
+    ids="$(docker ps --all --quiet --filter "label=com.docker.compose.project=$1" \
+      --filter "label=com.docker.compose.service=$service")"
+    step "Removing $service, which the compose files no longer hold" stop_and_remove $ids || return 1
+  done
+}
+
+apply_release() {
+  local mode="$1" name="$2" folder="$3" version="$4" list="$5" only="$6" rendered
+  (
+    set -e
+    rm -f "$work/reason"
+    fail() {
+      printf '%s\n' "$1" > "$work/reason"
+      exit "${2:-1}"
+    }
+    code=0
+    load_secrets "$name" "$folder" || code=$?
+    if [ "$code" -eq 2 ]; then
+      fail missing-secrets 2
+    elif [ "$code" -ne 0 ]; then
+      fail unreachable 2
+    fi
+    rendered="$(rendered_file "$name" "$version")"
+    export VERSION="$version" DOCKER_SOCKET_GROUP="$group"
+    (umask 077 && release_compose "$name" "$folder" config > "$rendered") || fail start
+    unset VERSION DOCKER_SOCKET_GROUP
+    for secret in $(secret_names "$folder"); do
+      unset "$secret"
+    done
+    if [ -n "$list" ]; then
+      step "Pulling our images by their verified digests" pin_images "$list" "$version" || fail pull
+    fi
+    outside="$(awk -F'|' '$2 !~ /^ghcr\.io\/zigordev\// { print $1 }' "$work/services")"
+    if [ -n "$outside" ]; then
+      step "Pulling the outside images" rendered_compose "$name" "$rendered" pull --quiet $outside || fail pull
+    fi
+    starts="$(services_of start)"
+    if [ -n "$starts" ]; then
+      step "Starting $(echo $starts)" rendered_compose "$name" "$rendered" up --detach --no-deps --wait \
+        --wait-timeout "$health_timeout" $starts || fail start
+    fi
+    if [ "$mode" = "deploy" ]; then
+      for job in $(services_of job); do
+        step "Running $job" rendered_compose "$name" "$rendered" up --no-deps --force-recreate \
+          --exit-code-from "$job" "$job" || fail job
+      done
+    fi
+    for service in $(services_of roll); do
+      if [ "$mode" = "restore" ] && ! listed "$only" "$service"; then
+        continue
+      fi
+      remove_stopped "$name" "$service"
+      if [ -z "$(rendered_compose "$name" "$rendered" ps --quiet "$service")" ]; then
+        printf '%s\n' "$service" >> "$work/touched"
+        step "Starting $service" rendered_compose "$name" "$rendered" up --detach --no-deps --force-recreate --wait \
+          --wait-timeout "$health_timeout" "$service" || fail health
+      else
+        step "Rolling out $service" docker rollout --project-name "$name" --file "$rendered" \
+          --timeout "$health_timeout" "$service" || fail health
+        printf '%s\n' "$service" >> "$work/touched"
+      fi
+    done
+    if [ "$mode" != "restore" ]; then
+      remove_orphans "$name" || fail orphans
+    fi
+  )
+}
+
+reason_of() {
+  cat "$work/reason" 2> /dev/null || printf 'unexpected'
+}
+
+deploy() {
+  local current current_commit current_images new_release code previous_commit previous_images
+  local reason touched restored restore_code service
+  take_lock "$target"
+  current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
+  current_commit="$(field "$current" .commit)"
+  current_images="$(field "$current" .images)"
+  say "Deploying $target at $commit from main of zigordev/$repo"
+  step "Fetching main of zigordev/$repo" fetch_main "$target" "$repo" || refuse unreachable "GitHub did not answer"
+  if ! is_ancestor "$target" "$commit" refs/heads/main; then
+    refuse not-on-main "$commit is not on main of zigordev/$repo"
+  fi
+  if [ -n "$current_commit" ] && [ "$commit" != "$current_commit" ] && is_ancestor "$target" "$commit" "$current_commit"; then
+    report "result=skipped reason=overtaken target=$target commit=$commit current=$current_commit"
+    exit 0
+  fi
+  prepare_release "$target" "$dir" "$commit" || refuse bad-input
+  inspect_release "$target" "$rel" "$commit" "$images" || refuse "$(reason_of)"
+  new_release="$rel"
+  : > "$work/touched"
+  set +e
+  apply_release deploy "$target" "$new_release" "$commit" "$images" ""
+  code=$?
+  set -e
+  if [ "$code" -eq 0 ]; then
+    if [ "$commit" = "$current_commit" ]; then
+      previous_commit="$(field "$current" .previous.commit)"
+      previous_images="$(field "$current" .previous.images)"
+    else
+      previous_commit="$current_commit"
+      previous_images="$current_images"
+    fi
+    say "Recording $commit as the version of $target"
+    if ! write_record "$target" "$commit" "$images" "$previous_commit" "$previous_images"; then
+      say "The new version serves, but Parameter Store did not take its record"
+      report "result=failed reason=record target=$target commit=$commit restored=none"
+      exit 1
+    fi
+    prune_releases "$target" "$commit" "$previous_commit"
+    report "result=deployed target=$target commit=$commit previous=${current_commit:-none}"
+    exit 0
+  fi
+  reason="$(reason_of)"
+  if [ "$code" -eq 2 ]; then
+    refuse "$reason"
+  fi
+  touched="$(cat "$work/touched")"
+  restored="none"
+  if [ -n "$current_commit" ]; then
+    say "Putting $current_commit back"
+    restored="failed"
+    if prepare_release "$target" "$dir" "$current_commit" &&
+      inspect_release "$target" "$rel" "$current_commit" "$current_images"; then
+      set +e
+      apply_release restore "$target" "$rel" "$current_commit" "$current_images" "$touched"
+      restore_code=$?
+      set -e
+      if [ "$restore_code" -eq 0 ]; then
+        restored="$current_commit"
+      fi
+    fi
+  else
+    for service in $touched; do
+      rendered_compose "$target" "$(rendered_file "$target" "$commit")" rm --stop --force "$service" > /dev/null 2>&1 || true
+    done
+  fi
+  report "result=failed reason=$reason target=$target commit=$commit restored=$restored"
+  exit 1
+}
+
+rollback() {
+  local current current_commit previous_commit previous_images code
+  take_lock "$target"
+  current="$(read_record "$target")" || refuse unreachable "Parameter Store did not answer"
+  current_commit="$(field "$current" .commit)"
+  if [ "$current_commit" != "$commit" ]; then
+    refuse not-current "$commit is not the version of $target that runs"
+  fi
+  previous_commit="$(field "$current" .previous.commit)"
+  previous_images="$(field "$current" .previous.images)"
+  if [ -z "$previous_commit" ]; then
+    refuse no-previous "No version of $target ran before $commit"
+  fi
+  say "Rolling $target back from $commit to $previous_commit"
+  step "Fetching main of zigordev/$repo" fetch_main "$target" "$repo" || refuse unreachable "GitHub did not answer"
+  prepare_release "$target" "$dir" "$previous_commit" || refuse bad-input
+  inspect_release "$target" "$rel" "$previous_commit" "$previous_images" || refuse "$(reason_of)"
+  : > "$work/touched"
+  set +e
+  apply_release rollback "$target" "$rel" "$previous_commit" "$previous_images" ""
+  code=$?
+  set -e
+  if [ "$code" -eq 2 ]; then
+    refuse "$(reason_of)"
+  elif [ "$code" -ne 0 ]; then
+    report "result=failed reason=$(reason_of) target=$target commit=$commit restored=none"
+    exit 1
+  fi
+  say "Recording $previous_commit as the version of $target"
+  if ! write_record "$target" "$previous_commit" "$previous_images" "" ""; then
+    say "The old version serves again, but Parameter Store did not take its record"
+    report "result=failed reason=record target=$target commit=$commit restored=$previous_commit"
+    exit 1
+  fi
+  report "result=rolled-back target=$target commit=$previous_commit from=$commit"
+  exit 0
+}
+
+redeploy_one() {
+  local code
+  set -e
+  if ! step "Fetching main of zigordev/$repo" fetch_main "$target" "$repo"; then
+    report "result=failed reason=unreachable target=$target commit=$commit"
+    exit 1
+  fi
+  if ! prepare_release "$target" "$dir" "$commit"; then
+    report "result=failed reason=bad-input target=$target commit=$commit"
+    exit 1
+  fi
+  if ! inspect_release "$target" "$rel" "$commit" "$images"; then
+    report "result=failed reason=$(reason_of) target=$target commit=$commit"
+    exit 1
+  fi
+  : > "$work/touched"
+  set +e
+  apply_release deploy "$target" "$rel" "$commit" "$images" ""
+  code=$?
+  set -e
+  if [ "$code" -ne 0 ]; then
+    report "result=failed reason=$(reason_of) target=$target commit=$commit"
+    exit 1
+  fi
+  report "result=redeployed target=$target commit=$commit"
+}
+
+redeploy_recorded() {
+  local names record_name value failures=0 code
+  aws --region "$region" ssm get-parameters-by-path --path "$records" --output json > "$work/records.json" ||
+    refuse unreachable "Parameter Store did not answer"
+  names="$(jq -r --arg first "$records/$shared_target" \
+    '.Parameters | sort_by(if .Name == $first then 0 else 1 end, .Name) | .[].Name' "$work/records.json")"
+  reported="yes"
+  if [ -z "$names" ]; then
+    say "platform-deploy: result=skipped reason=nothing-recorded target=none commit=none"
+    exit 0
+  fi
+  for record_name in $names; do
+    target="${record_name##*/}"
+    value="$(jq -r --arg name "$record_name" '.Parameters[] | select(.Name == $name) | .Value' "$work/records.json")"
+    commit="$(field "$value" .commit)"
+    images="$(field "$value" .images)"
+    repo="$(field "$value" .repo)"
+    dir="$(field "$value" .dir)"
+    if ! valid "$name_pattern" "$target" || ! valid "$repo_pattern" "$repo" || ! valid "$dir_pattern" "$dir" ||
+      ! valid "$commit_pattern" "$commit" || ! valid_images "$images"; then
+      say "platform-deploy: result=failed reason=bad-input target=$target commit=${commit:-none}"
+      failures=$((failures + 1))
+      continue
+    fi
+    take_lock "$target"
+    if [ -n "$(docker ps --all --quiet --filter "label=com.docker.compose.project=$target")" ]; then
+      say "platform-deploy: result=skipped reason=present target=$target commit=$commit"
+      continue
+    fi
+    say "Bringing back $target at $commit"
+    set +e
+    (redeploy_one)
+    code=$?
+    set -e
+    if [ "$code" -ne 0 ]; then
+      failures=$((failures + 1))
+    fi
+  done
+  if [ "$failures" -gt 0 ]; then
+    exit 1
+  fi
+  exit 0
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --redeploy-recorded)
+      redeploy="yes"
+      shift
+      ;;
+    --target | --repo | --dir | --action | --commit | --images)
+      if [ $# -lt 2 ]; then
+        refuse bad-input "$1 needs a value"
+      fi
+      case "$1" in
+        --target) target="$2" ;;
+        --repo) repo="$2" ;;
+        --dir) dir="$2" ;;
+        --action) action="$2" ;;
+        --commit) commit="$2" ;;
+        --images) images="$2" ;;
+      esac
+      shift 2
+      ;;
+    *)
+      refuse bad-input "Unknown argument: $1"
+      ;;
+  esac
+done
+
+group="$(stat -c %g "$socket" 2> /dev/null || printf '0')"
+
+if [ -n "$redeploy" ]; then
+  redeploy_recorded
+fi
+
+valid "$name_pattern" "$target" || refuse bad-input "The target must be a lower-case name"
+valid "$repo_pattern" "$repo" || refuse bad-input "The repo must be the name of a repo of zigordev"
+valid "$dir_pattern" "$dir" || refuse bad-input "The folder must be . or a path inside the repo"
+valid "$commit_pattern" "$commit" || refuse bad-input "The commit must be a full SHA of 40 characters"
+valid_images "$images" || refuse bad-input "Each image must read ghcr.io/zigordev/<app>@sha256:<digest>"
+
+case "$action" in
+  deploy)
+    deploy
+    ;;
+  rollback)
+    if [ -n "$images" ]; then
+      refuse bad-input "A rollback takes no images"
+    fi
+    rollback
+    ;;
+  *)
+    refuse bad-input "The action must be deploy or rollback"
+    ;;
+esac

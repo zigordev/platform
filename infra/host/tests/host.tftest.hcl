@@ -93,7 +93,7 @@ run "no_container_reaches_the_instance_role" {
   }
 }
 
-run "the_host_role_lets_systems_manager_in_and_reads_no_parameter" {
+run "the_host_role_lets_systems_manager_in_and_reads_no_parameter_by_itself" {
   command = plan
 
   assert {
@@ -108,7 +108,7 @@ run "the_host_role_lets_systems_manager_in_and_reads_no_parameter" {
 
   assert {
     condition     = !strcontains(aws_iam_role_policy.host_systems_manager.policy, "GetParameter")
-    error_message = "The role reads no parameter, so a process on the host cannot read the GitHub App's key or any other secret."
+    error_message = "Systems Manager's access reads no parameter. infra/deploy adds the few a deploy needs by name, so the host never reads the GitHub App's key."
   }
 }
 
@@ -159,8 +159,13 @@ run "the_user_data_writes_every_host_file_and_runs_the_setup" {
   }
 
   assert {
-    condition     = length(local.user_data) < 16384
-    error_message = "AWS takes at most 16 KB of user data."
+    condition     = aws_instance.host.user_data_base64 == base64gzip(local.user_data)
+    error_message = "The user data is compressed, and cloud-init unpacks it by itself."
+  }
+
+  assert {
+    condition     = length(aws_instance.host.user_data_base64) <= 21848
+    error_message = "AWS takes at most 16 KB of user data, counted after compression: 21848 characters of base64."
   }
 
   assert {

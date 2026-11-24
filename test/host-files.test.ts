@@ -80,4 +80,22 @@ describe('the files of the host', () => {
   it('closes the SSH server, so a shell arrives through AWS Systems Manager only', () => {
     expect(setup).toContain('systemctl mask ssh.service ssh.socket');
   });
+
+  it('installs what a deploy needs: git, jq, the AWS CLI from its snap, and docker-rollout at one commit', () => {
+    expect(setup).toMatch(/docker-compose-plugin git jq$/m);
+    expect(setup).toContain('snap install aws-cli --classic --channel=v2/stable');
+    expect(setup).toMatch(
+      /rollout_url="https:\/\/raw\.githubusercontent\.com\/wowu\/docker-rollout\/[0-9a-f]{40}\/docker-rollout"/
+    );
+    expect(setup).toMatch(/rollout_sha256="[0-9a-f]{64}"/);
+    expect(setup).toContain('"$plugins/docker-rollout"');
+  });
+
+  it('brings back the recorded deploys once Docker runs, and the setup switches that on', () => {
+    const unit = readFileSync(join(units, 'platform-redeploy.service'), 'utf8');
+    expect(unit).toContain('ExecStart=/usr/local/sbin/platform-deploy --redeploy-recorded');
+    expect(unit).toContain('Requires=docker.service');
+    expect(unit).toContain('After=network-online.target docker.service');
+    expect(setup).toContain('systemctl enable --now platform-redeploy.service');
+  });
 });

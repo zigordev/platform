@@ -18,9 +18,11 @@ locals {
   repos = {
     toolkit = {
       description = "The shared base of every zigordev repository: packages, the product template, pipelines, rules and the handbook"
+      deploys     = false
     }
     platform = {
       description = "The infrastructure and the shared services of every zigordev product: the ingress, telemetry, dashboards, alerts, backups and runbooks"
+      deploys     = true
     }
   }
 
@@ -31,6 +33,11 @@ locals {
 
   release = {
     environment = "release"
+    branch      = "main"
+  }
+
+  production = {
+    environment = "production"
     branch      = "main"
   }
 

@@ -1,0 +1,14 @@
+{
+  "hello": {
+    "description": "A product whose repo does not exist yet",
+    "live": false
+  },
+  "shop": {
+    "description": "A product with a repo",
+    "live": true,
+    "deploy": {
+      "repo": "shop",
+      "repoId": 42
+    }
+  }
+}

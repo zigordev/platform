@@ -25,7 +25,7 @@ resource "aws_instance" "host" {
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.host.name
   monitoring                  = false
-  user_data                   = local.user_data
+  user_data_base64            = base64gzip(local.user_data)
   user_data_replace_on_change = true
 
   credit_specification {

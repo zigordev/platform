@@ -28,4 +28,7 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0016](0016-the-code-makes-grafanas-tokens-from-the-owners-one-token.md)               | The code makes Grafana's tokens from the owner's one token                 | 2026-11-24 | accepted |
 | [0017](0017-the-shared-services-reach-the-host-through-the-deploy-path.md)             | The shared services reach the host through the deploy path                 | 2026-11-24 | accepted |
 | [0018](0018-dashboards-and-alerts-reach-grafana-cloud-once-the-agent-sends-data.md)    | Dashboards and alerts reach Grafana Cloud once the agent sends data        | 2026-11-24 | accepted |
+| [0019](0019-a-deploy-is-one-command-per-target-and-the-host-checks-what-it-runs.md)    | A deploy is one command per target, and the host checks what it runs       | 2026-11-24 | accepted |
+| [0020](0020-the-host-records-each-deployed-version-in-parameter-store.md)              | The host records each deployed version in Parameter Store                  | 2026-11-24 | accepted |
+| [0021](0021-outside-images-are-pinned-by-their-digest.md)                              | Outside images are pinned by their digest                                  | 2026-11-24 | accepted |
 | [0022](0022-plans-read-the-state-without-locking-it.md)                                | Plans read the state without locking it                                    | 2026-11-24 | accepted |

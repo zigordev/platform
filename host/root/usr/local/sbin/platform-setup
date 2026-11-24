@@ -15,10 +15,28 @@ systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service
 systemctl mask ssh.service ssh.socket
 systemctl stop ssh.socket ssh.service
 
+if ! snap list aws-cli > /dev/null 2>&1; then
+  snap install aws-cli --classic --channel=v2/stable
+fi
+
 systemctl daemon-reload
 apt_get update
 apt_get --yes dist-upgrade
-apt_get --yes install --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
+apt_get --yes install --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin git jq
+
+rollout_url="https://raw.githubusercontent.com/wowu/docker-rollout/a72a9632c38187abd6d8799e4a9d5054a67fe615/docker-rollout"
+rollout_sha256="cdeaba6ae9eee3b0b606286e585bbda6787283d801a6ad6d9b9d2bc347fda05b"
+plugins="/usr/local/lib/docker/cli-plugins"
+mkdir -p "$plugins"
+curl --fail --silent --show-error --location --retry 5 "$rollout_url" --output "$plugins/docker-rollout.download"
+if [ "$(sha256sum "$plugins/docker-rollout.download" | cut -d ' ' -f 1)" != "$rollout_sha256" ]; then
+  rm -f "$plugins/docker-rollout.download"
+  echo "docker-rollout does not match its pinned hash, so it is not installed" >&2
+  exit 1
+fi
+install -m 0755 "$plugins/docker-rollout.download" "$plugins/docker-rollout"
+rm -f "$plugins/docker-rollout.download"
 
 systemctl enable --now docker.service
 systemctl enable --now platform-docker-cleanup.timer platform-container-memory.timer
+systemctl enable --now platform-redeploy.service
