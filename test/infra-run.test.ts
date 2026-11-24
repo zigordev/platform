@@ -20,6 +20,7 @@ case "$command" in
     ;;
   plan)
     echo "planning $stack in account ${account}"
+    echo "$*" >> "$FAKE_PLAN_ARGS"
     for arg in "$@"; do
       case "$arg" in -out=*) : > "\${arg#-out=}" ;; esac
     done
@@ -41,6 +42,7 @@ interface Run {
   readonly summary: string;
   readonly outputs: string;
   readonly applied: string;
+  readonly planArgs: string;
 }
 
 let work: string;
@@ -49,7 +51,8 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
   const summary = join(work, 'summary.md');
   const outputs = join(work, 'outputs.txt');
   const applied = join(work, 'applied.log');
-  for (const file of [summary, outputs, applied]) {
+  const planArgs = join(work, 'plan-args.log');
+  for (const file of [summary, outputs, applied, planArgs]) {
     writeFileSync(file, '');
   }
   const result = spawnSync('bash', [script, mode], {
@@ -62,6 +65,7 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
       GITHUB_OUTPUT: outputs,
       AWS_ACCOUNT_ID: account,
       FAKE_LOG: applied,
+      FAKE_PLAN_ARGS: planArgs,
       ...fakes,
     },
   });
@@ -72,6 +76,7 @@ function run(mode: string, fakes: Record<string, string> = {}): Run {
     summary: readFileSync(summary, 'utf8'),
     outputs: readFileSync(outputs, 'utf8'),
     applied: readFileSync(applied, 'utf8'),
+    planArgs: readFileSync(planArgs, 'utf8'),
   };
 }
 
@@ -129,6 +134,15 @@ describe('infra/run.sh plan', () => {
     const result = run('plan', { FAKE_BOOTSTRAP_INIT: '1' });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('The plan failed for: bootstrap');
+  });
+
+  it('plans concisely, so no value read during the plan reaches the public summary', () => {
+    const result = run('plan');
+    const lines = result.planArgs.split('\n').filter(Boolean);
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.split(' ')).toContain('-concise');
+    }
   });
 
   it('leaves no plan file behind, because a plan holds secret values in plain text', () => {

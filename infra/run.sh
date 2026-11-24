@@ -46,7 +46,7 @@ for dir in "$root"/*/; do
   tofu -chdir="$dir" init -input=false -lockfile=readonly -no-color > "$dir/init.log" 2>&1
   code=$?
   if [ "$code" -eq 0 ]; then
-    tofu -chdir="$dir" plan -input=false -lock-timeout=120s -detailed-exitcode -no-color -out="$dir/pipeline.tfplan" > "$dir/plan.log" 2>&1
+    tofu -chdir="$dir" plan -input=false -lock-timeout=120s -detailed-exitcode -concise -no-color -out="$dir/pipeline.tfplan" > "$dir/plan.log" 2>&1
     code=$?
   else
     mv "$dir/init.log" "$dir/plan.log"
