@@ -98,6 +98,10 @@ run "alerts_go_to_the_owners_address_by_email" {
 run "no_check_runs_while_no_product_is_live" {
   command = plan
 
+  variables {
+    products_file = "tests/products-not-live.json"
+  }
+
   assert {
     condition     = length(grafana_synthetic_monitoring_check.health) == 0
     error_message = "A product that is not live has no outside check yet, so it raises no false alarm."

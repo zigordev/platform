@@ -1,0 +1,6 @@
+{
+  "later": {
+    "description": "A product that is not live yet",
+    "live": false
+  }
+}
