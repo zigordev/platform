@@ -238,7 +238,7 @@ So the host costs $6.29 a month until 2026-12-31, and $19.72 a month from 2027-0
 | Part                       | What it is                                                                                                                                                                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The tunnel `platform-host` | A connection that the host opens to Cloudflare, so visitors reach the host with no port open. Cloudflare holds its configuration: one route sends every `*.zigordev.com` name to Traefik at `http://traefik:8080`, and anything else gets a 404 |
-| One record per product     | `<product>.zigordev.com`, a proxied CNAME to the tunnel, made from `local.products` in `infra/cloudflare/locals.tf`. It holds `hello`, the test page of step 3.9                                                                                |
+| One record per product     | `<product>.zigordev.com`, a proxied CNAME to the tunnel, made from the product list `infra/products.json`. It holds `hello`, the test page of step 3.9                                                                                          |
 | The mail records           | SPF `v=spf1 -all` names no sender, and DMARC `p=reject; sp=reject` asks every receiver to reject mail that claims the domain. They change when SES sends, in phase 5                                                                            |
 | The HTTPS settings         | Always Use HTTPS, automatic HTTPS rewrites, and TLS 1.2 at least                                                                                                                                                                                |
 
@@ -261,7 +261,7 @@ The tunnel's token is in the dashboard under Zero Trust, then Networks: open the
 
 ### How a product gets its address
 
-Once the owner has said yes to a product, its address is one entry in `local.products`. The plan shows one new record, and the tunnel needs no change, because Traefik routes the name by the labels that the product's containers carry.
+Once the owner has said yes to a product, its address is one entry in `infra/products.json`. The plan shows one new record, and the tunnel needs no change, because Traefik routes the name by the labels that the product's containers carry.
 
 ### How to check it
 
@@ -280,7 +280,7 @@ Nothing. The free plan holds the DNS, the proxy with its certificate, the tunnel
 
 ## Grafana Cloud
 
-Production's telemetry goes to Grafana Cloud, on its free plan, in the stack `merryantelope975` in Ireland. It is step 3.6 of the build plan, in two stacks: `infra/grafana-cloud` makes the access, and `infra/grafana`, which follows, fills the stack itself.
+Production's telemetry goes to Grafana Cloud, on its free plan, in the stack `merryantelope975` in Ireland. It is step 3.6 of the build plan, in two stacks: `infra/grafana-cloud` makes the access, and `infra/grafana` fills the stack itself.
 
 ### The access
 
@@ -295,6 +295,21 @@ Production's telemetry goes to Grafana Cloud, on its free plan, in the stack `me
 | `/platform/GRAFANA_URL`, `GRAFANA_STACK_ID`, `GRAFANA_OTLP_URL`, `GRAFANA_LOKI_URL`, `GRAFANA_LOKI_USER`, `GRAFANA_PROMETHEUS_URL`, `GRAFANA_PROMETHEUS_USER`, `GRAFANA_TEMPO_URL`, `GRAFANA_TEMPO_USER`, `GRAFANA_CHECKS_URL` | The stack's addresses and ids, as plain strings                            | The host and the stack `infra/grafana`                                      |
 
 Every token covers this one stack. The stack's numeric id works like an account number, so the code marks it sensitive, and the pipeline plans with `-concise`: no Grafana id reaches the public run summary.
+
+### The stack
+
+`infra/grafana` signs in as the stack account `platform-opentofu` and fills the stack.
+
+| Part                                              | What it is                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The data sources `prometheus`, `loki` and `tempo` | The stack's own stores, under the names and uids the laptop's Grafana uses, so the same dashboards and alerts work in both. They sign in with the token that only reads                                                                                                              |
+| The contact point `email`                         | Mails the address in `/platform/ALERT_EMAIL`, the one the budget alarm writes to. The phone app follows in phase 7                                                                                                                                                                   |
+| The notification policy                           | Every alert goes to `email`, grouped by folder and alert, and repeats every 4 hours while it fires                                                                                                                                                                                   |
+| The outside checks                                | For every product marked `"live": true` in `infra/products.json`: a call to `https://<product>.zigordev.com/health` every 5 minutes, from Frankfurt and from London, that fails without TLS. No product is live before step 3.9, so no check runs yet, and none raises a false alarm |
+
+Two probes every 5 minutes are 17,280 runs a month per product, so the free 100,000 cover five products.
+
+The dashboards and the alert rules reach the stack through the pipeline, once the telemetry agent runs on the host in step 3.7, so no alert fires on a stack that has no data yet. [Record 0017](adr/0017-the-shared-services-reach-the-host-through-the-deploy-path.md) says why the agent waits for the deploy path.
 
 ### What Grafana Cloud costs
 
@@ -344,6 +359,8 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | The Cloudflare token nears its end date            | The token made on 2026-11-24 works until 2027-11-22. Before that day, the owner makes a new one with the same four permissions, or moves the end date on the token's page, and stores a new value with the same command. A token works only between its start and end dates: on 2026-11-24 Cloudflare refused one whose start date lay a year ahead, with "Invalid access token" |
 | A Grafana token leaked, or has to change           | Raise `local.rotation` in `infra/grafana-cloud/locals.tf` through a pull request. The apply replaces all four tokens and stores the new ones under the same names. The host takes the new agent token at its next deploy                                                                                                                                                         |
 | The plan of `grafana-cloud` fails to sign in       | Grafana refuses the owner's token, `/platform/GRAFANA_CLOUD_TOKEN`. The owner makes a new one with the same five scopes in Grafana's pages, under Access policies, and stores it with the same command as the Cloudflare token                                                                                                                                                   |
+| A product goes live                                | Set `"live": true` for it in `infra/products.json`, once its `/health` answers over https. The plan shows its new outside check                                                                                                                                                                                                                                                  |
+| The plan of `grafana` fails to sign in             | The stack token is gone or was replaced while the plan ran. Apply `grafana-cloud` first, which stores the current tokens, then plan `grafana` again                                                                                                                                                                                                                              |
 | A product's address answers with error 1033        | The tunnel has no connector: `cloudflared` on the host is down, or has no token. From step 3.7 the host's logs say which                                                                                                                                                                                                                                                         |
 | Docker does not start on the host                  | The data disk is missing, or `platform-data-disk.service` refused to touch it. `systemctl status platform-data-disk.service` says which. A disk that holds unknown data is never formatted: find out what is on it before anything else                                                                                                                                          |
 | The data disk is filling up                        | Raise `local.data_disk.size_gb` in `infra/host/locals.tf` through a pull request. After the apply, run `sudo resize2fs /dev/disk/by-label/platform-data` in a shell. The disk grows while the host runs                                                                                                                                                                          |
