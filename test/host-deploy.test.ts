@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -158,32 +158,49 @@ function run(...args: string[]) {
   return runWith({}, ...args);
 }
 
+function environment(extra: Record<string, string>): NodeJS.ProcessEnv {
+  return {
+    ...gitEnv,
+    PATH: `${fakes}:${process.env.PATH ?? ''}`,
+    PLATFORM_DEPLOY_STATE: join(work, 'state'),
+    PLATFORM_DEPLOY_RUN: join(work, 'run'),
+    PLATFORM_DEPLOY_LOCKS: join(work, 'locks'),
+    PLATFORM_GIT_BASE: `file://${join(work, 'remote')}`,
+    PLATFORM_DOCKER_SOCKET: join(work, 'docker.sock'),
+    FAKE_DIR: join(work, 'fake'),
+    FAKE_AWS: join(work, 'aws'),
+    FAKE_SECRET_NAME: 'HELLO_API_KEYS',
+    PLATFORM_SETUP_MARKER: join(work, 'setup-done'),
+    ...extra,
+  };
+}
+
+function outcome(code: number | null, stdout: string, stderr: string) {
+  const lines = stdout.trimEnd().split('\n');
+  return { code, stdout, stderr, lines, last: lines.at(-1) ?? '' };
+}
+
 function runWith(extra: Record<string, string>, ...args: string[]) {
   const result = spawnSync('bash', [script, ...args], {
     encoding: 'utf8',
-    env: {
-      ...gitEnv,
-      PATH: `${fakes}:${process.env.PATH ?? ''}`,
-      PLATFORM_DEPLOY_STATE: join(work, 'state'),
-      PLATFORM_DEPLOY_RUN: join(work, 'run'),
-      PLATFORM_DEPLOY_LOCKS: join(work, 'locks'),
-      PLATFORM_GIT_BASE: `file://${join(work, 'remote')}`,
-      PLATFORM_DOCKER_SOCKET: join(work, 'docker.sock'),
-      FAKE_DIR: join(work, 'fake'),
-      FAKE_AWS: join(work, 'aws'),
-      FAKE_SECRET_NAME: 'HELLO_API_KEYS',
-      PLATFORM_SETUP_MARKER: join(work, 'setup-done'),
-      ...extra,
-    },
+    env: environment(extra),
   });
-  const lines = result.stdout.trimEnd().split('\n');
-  return {
-    code: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    lines,
-    last: lines.at(-1) ?? '',
-  };
+  return outcome(result.status, result.stdout, result.stderr);
+}
+
+function runLater(...args: string[]): Promise<ReturnType<typeof outcome>> {
+  return new Promise((resolve) => {
+    const child = spawn('bash', [script, ...args], { env: environment({}) });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('close', (code) => resolve(outcome(code, stdout, stderr)));
+  });
 }
 
 function deploy(sha: string, images = ours) {
@@ -594,6 +611,54 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     );
     expect(result.stdout).toContain("The host's first-boot setup did not finish within 0 seconds");
     expect(existsSync(join(work, 'fake', 'aws-calls'))).toBe(false);
+  });
+
+  it("reads the group of Docker's socket only once a new host's setup is done", async () => {
+    const first = release();
+    rmSync(join(work, 'setup-done'));
+    writeFileSync(join(work, 'fake', 'no-socket'), '');
+    const later = runLater(
+      '--target',
+      'hello',
+      '--repo',
+      'hello',
+      '--dir',
+      '.',
+      '--action',
+      'deploy',
+      '--commit',
+      first,
+      '--images',
+      ours
+    );
+    setTimeout(() => {
+      rmSync(join(work, 'fake', 'no-socket'));
+      writeFileSync(join(work, 'setup-done'), '2026-11-24T14:12:00Z\n');
+    }, 1000);
+    const result = await later;
+    expect(result.last).toBe(
+      `platform-deploy: result=deployed target=hello commit=${first} previous=none`
+    );
+    expect(result.stdout).toContain("Waiting for the host's first-boot setup to finish");
+    const configs = calls().filter((call) =>
+      /^docker compose .* config( |$)/.test(call.split(' | ')[0] ?? '')
+    );
+    expect(configs.length).toBeGreaterThan(0);
+    for (const call of configs) {
+      expect(call).toMatch(/ GROUP=988$/);
+    }
+  });
+
+  it("refuses rather than guess a group when Docker's socket is missing after the setup", () => {
+    const first = release();
+    writeFileSync(join(work, 'fake', 'no-socket'), '');
+    const result = deploy(first);
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=busy target=hello commit=${first}`
+    );
+    expect(result.stdout).toContain("Docker's socket");
+    expect(calls()).toEqual([]);
   });
 
   it('refuses while another deploy of the same target holds the lock', () => {
