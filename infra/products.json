@@ -1,0 +1,6 @@
+{
+  "hello": {
+    "description": "The test page that step 3.9 deploys",
+    "live": false
+  }
+}

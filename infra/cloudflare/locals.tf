@@ -10,11 +10,7 @@ locals {
   domain          = "zigordev.com"
   token_parameter = "/platform/CLOUDFLARE_API_TOKEN"
 
-  products = {
-    hello = {
-      description = "The test page that step 3.9 deploys"
-    }
-  }
+  products = jsondecode(file("${path.module}/../products.json"))
 
   tunnel = {
     name   = "platform-host"

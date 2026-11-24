@@ -1,0 +1,10 @@
+{
+  "hello": {
+    "description": "A product that is live in this test",
+    "live": true
+  },
+  "later": {
+    "description": "A product that is not live yet",
+    "live": false
+  }
+}
