@@ -15,7 +15,7 @@ concurrency:
 jobs:
   pipeline:
     name: Pipeline
-    uses: zigordev/toolkit/.github/workflows/check.yml@a2a493dccd984127492814a037eedf470929c0e5 # v1.16.0
+    uses: zigordev/toolkit/.github/workflows/check.yml@0bc71363d6078f30a24455779350093449c28673 # v1.19.0
     permissions:
       contents: read
       security-events: write
@@ -139,7 +139,7 @@ jobs:
     name: Release
     needs: [check]
     if: github.event_name == 'push'
-    uses: zigordev/toolkit/.github/workflows/release.yml@a2a493dccd984127492814a037eedf470929c0e5 # v1.16.0
+    uses: zigordev/toolkit/.github/workflows/release.yml@0bc71363d6078f30a24455779350093449c28673 # v1.19.0
     permissions:
       contents: write
       id-token: write
@@ -244,3 +244,18 @@ jobs:
           echo "::add-mask::$GRAFANA_TOKEN"
           export GRAFANA_SERVER GRAFANA_TOKEN
           pnpm --filter platform-observability run push
+
+  deploy:
+    name: Deploy the shared services
+    needs: [check, infra-apply]
+    if: always() && github.event_name == 'push' && needs.check.result == 'success' && (needs.infra-apply.result == 'success' || needs.infra-apply.result == 'skipped')
+    uses: zigordev/toolkit/.github/workflows/deploy.yml@0bc71363d6078f30a24455779350093449c28673 # v1.19.0
+    permissions:
+      contents: read
+      id-token: write
+      attestations: read
+    with:
+      target: platform
+      compose-dir: stack
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}

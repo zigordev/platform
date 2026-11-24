@@ -1,0 +1,39 @@
+services:
+  docker-proxy:
+    user: "65534:${DOCKER_SOCKET_GROUP}"
+
+  alloy:
+    environment:
+      OTLP_DESTINATION: ${GRAFANA_OTLP_URL}
+      OTLP_USERNAME: ${GRAFANA_STACK_ID}
+      OTLP_PASSWORD: ${GRAFANA_ALLOY_TOKEN}
+      LOKI_DESTINATION: ${GRAFANA_LOKI_URL}/loki/api/v1/push
+      LOKI_USERNAME: ${GRAFANA_LOKI_USER}
+      LOKI_PASSWORD: ${GRAFANA_ALLOY_TOKEN}
+      TEXTFILE_DIRECTORY: /host/root/var/lib/platform/metrics
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
+    command: [tunnel, --metrics, "0.0.0.0:2000", --grace-period, 20s, run]
+    user: "65532:65532"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    healthcheck:
+      test: [CMD, cloudflared, tunnel, --metrics, "127.0.0.1:2000", ready]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+    depends_on:
+      traefik:
+        condition: service_healthy
+    networks: [zigordev]

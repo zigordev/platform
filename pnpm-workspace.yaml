@@ -8,7 +8,7 @@ catalog:
   "@grafana/grafana-foundation-sdk": 0.0.22
   "@types/node": 26.6.6
   "@vitest/coverage-v8": 5.1.1
-  "@zigordev/dev": 1.16.0
+  "@zigordev/dev": 1.19.0
   lefthook: 2.2.1
   markdownlint-cli2: 0.24.2
   semantic-release: 25.0.9

@@ -2,7 +2,7 @@ name: platform
 
 services:
   docker-proxy:
-    image: wollomatic/socket-proxy:1.14.0
+    image: wollomatic/socket-proxy:1.14.0@sha256:fead157c4de4092461267092be49c993c2e6dd296a54c89ed04b8c870016b045
     command:
       - -loglevel=info
       - -logjson
@@ -17,6 +17,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 10s
+    restart: unless-stopped
     mem_limit: 64m
     cpus: 0.25
     volumes:
@@ -29,13 +30,14 @@ services:
     networks: [docker]
 
   traefik:
-    image: traefik:v3.7.19
+    image: traefik:v3.7.19@sha256:a6c0194dda77bcb804824580f36fa7edc56e315b1acfe933366c8b52844a78a4
     user: "65532:65532"
     init: true
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 30s
+    restart: unless-stopped
     mem_limit: 128m
     cpus: 1
     environment:
@@ -66,7 +68,7 @@ services:
     networks: [zigordev, docker]
 
   alloy:
-    image: grafana/alloy:v1.22.0
+    image: grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189
     entrypoint:
       - sh
       - -c
@@ -84,6 +86,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 20s
+    restart: unless-stopped
     mem_limit: 256m
     cpus: 1
     environment:
@@ -190,7 +193,11 @@ services:
           procfs_path    = "/host/proc"
           sysfs_path     = "/host/sys"
           rootfs_path    = "/host/root"
-          set_collectors = ["cpu", "meminfo", "filesystem"]
+          set_collectors = ["cpu", "meminfo", "filesystem", "textfile"]
+
+          textfile {
+            directory = sys.env("TEXTFILE_DIRECTORY")
+          }
         }
 
         prometheus.scrape "machine" {
@@ -207,7 +214,7 @@ services:
 
           rule {
             source_labels = ["__name__", "mode", "fstype"]
-            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)"
+            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;"
             action        = "keep"
           }
 

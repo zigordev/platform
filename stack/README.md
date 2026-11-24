@@ -97,24 +97,26 @@ A new app needs no entry anywhere. It appears in the list of the App dashboard w
 
 ### Each container is boxed in
 
-| Rule                                                                                                    | Why                                                            |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| An exact image version                                                                                  | The same bytes on every laptop, and Renovate proposes the next |
-| A health check                                                                                          | `up` can wait for it, and the ingress can trust it             |
-| A memory limit and a CPU limit                                                                          | One service cannot starve the others                           |
-| An init process, no new privileges, no capabilities, at most 30 seconds to stop                         | A broken service stays inside its box and stops cleanly        |
-| A user that is not root, and a read-only file system                                                    | A flaw in the service cannot change the service                |
-| No published port, except port 80 of the ingress and port 4318 of the agent, both on this laptop itself | Nothing is reachable from the network the laptop is on         |
+| Rule                                                                                                    | Why                                                                                           |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| An exact image version and its digest                                                                   | The same bytes everywhere, and a tag pushed again changes nothing. Renovate proposes the next |
+| A health check                                                                                          | `up` can wait for it, and the ingress can trust it                                            |
+| A restart unless it was stopped                                                                         | The host restarts at night for updates, and every service comes back by itself                |
+| A memory limit and a CPU limit                                                                          | One service cannot starve the others                                                          |
+| An init process, no new privileges, no capabilities, at most 30 seconds to stop                         | A broken service stays inside its box and stops cleanly                                       |
+| A user that is not root, and a read-only file system                                                    | A flaw in the service cannot change the service                                               |
+| No published port, except port 80 of the ingress and port 4318 of the agent, both on this laptop itself | Nothing is reachable from the network the laptop is on                                        |
 
 `src/compose.test.ts` holds every service to these rules, one by one, and the job `gcx` to all but the health check, which a job that ends does not need. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
 
-| Service        | Memory limit | CPU limit | Used when idle on 2026-11-22 |
-| -------------- | ------------ | --------- | ---------------------------- |
-| `traefik`      | 128 MiB      | 1         | 24 MiB                       |
-| `docker-proxy` | 64 MiB       | 0.25      | 11 MiB                       |
-| `alloy`        | 256 MiB      | 1         | 51 MiB                       |
-| `lgtm`         | 2 GiB        | 2         | 614 MiB                      |
-| `mailpit`      | 128 MiB      | 0.5       | 10 MiB                       |
+| Service        | Memory limit | CPU limit | Used when idle on 2026-11-22      |
+| -------------- | ------------ | --------- | --------------------------------- |
+| `traefik`      | 128 MiB      | 1         | 24 MiB                            |
+| `docker-proxy` | 64 MiB       | 0.25      | 11 MiB                            |
+| `alloy`        | 256 MiB      | 1         | 51 MiB                            |
+| `lgtm`         | 2 GiB        | 2         | 614 MiB                           |
+| `mailpit`      | 128 MiB      | 0.5       | 10 MiB                            |
+| `cloudflared`  | 128 MiB      | 0.5       | Not measured yet, production only |
 
 ### The Docker proxy
 
@@ -134,17 +136,18 @@ Traefik warns once at each start that it "can reject some encoded characters in 
 
 ### The laptop and production
 
-Production is built in phase 3. It will start `compose.yaml` with a `compose.production.yaml` of its own.
+The host starts `compose.yaml` with `compose.production.yaml`, through the deploy path of platform: every merge to `main` deploys them as the target `platform`. `docs/cloud-first-deploy.md` in platform says how.
 
-| Thing                                  | On the laptop                                                        | In production                                               |
-| -------------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------- |
-| The three shared services              | From `compose.yaml`                                                  | The same file                                               |
-| How a request arrives                  | Port 80 on the laptop itself, over IPv4 and IPv6                     | Through Cloudflare's tunnel, with no published port         |
-| How an app outside a container reports | To `127.0.0.1:4318`, the agent's port published on the laptop itself | Every app runs in a container, so the port is not published |
-| Where the agent sends                  | To `lgtm`, with a made-up name and password that nothing checks      | To Grafana Cloud                                            |
-| Grafana and the mail catcher           | `lgtm` and `mailpit`                                                 | Grafana Cloud and Amazon SES                                |
-| The ingress's own pages                | At `traefik.localhost`                                               | Off                                                         |
-| The proxy's group                      | 0, which owns the socket on Docker Desktop                           | The group that owns the socket on the host                  |
+| Thing                                  | On the laptop                                                        | In production                                                                                                            |
+| -------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| The three shared services              | From `compose.yaml`                                                  | The same file                                                                                                            |
+| How a request arrives                  | Port 80 on the laptop itself, over IPv4 and IPv6                     | Through Cloudflare's tunnel. `cloudflared`, its connector, runs in production only and hands each request to the ingress |
+| How an app outside a container reports | To `127.0.0.1:4318`, the agent's port published on the laptop itself | Every app runs in a container, so the port is not published                                                              |
+| Where the agent sends                  | To `lgtm`, with a made-up name and password that nothing checks      | To Grafana Cloud, with the secrets that `.env.production.example` names                                                  |
+| Each container's memory                | No file, so the agent reads none                                     | The host's file `/var/lib/platform/metrics/containers.prom`, which a timer writes every minute                           |
+| Grafana and the mail catcher           | `lgtm` and `mailpit`                                                 | Grafana Cloud and Amazon SES                                                                                             |
+| The ingress's own pages                | At `traefik.localhost`                                               | Off                                                                                                                      |
+| The proxy's group                      | 0, which owns the socket on Docker Desktop                           | The group that owns the socket on the host, which the deploy passes as `DOCKER_SOCKET_GROUP`                             |
 
 ## How to use it, with one worked example
 

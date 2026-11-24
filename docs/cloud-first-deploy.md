@@ -4,13 +4,13 @@ Production is built in phase 3, and this page grows with it. Today it says what 
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                                   | State on 2026-11-23                                                                                                   |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below          | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version                            |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval           | Running since 2026-11-23: the bootstrap, the plan and the apply, and GitHub's settings                                |
-| The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                            | Written in step 3.4. It exists once the owner has approved its first apply                                            |
-| The shared services on the host                      | Through the deploy path below: platform's run on `main` sends the command `platform-deploy-platform` | The host's side was written in step 3.7. The shared services follow once the deploy workflow of `toolkit` is released |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana        | Written in step 3.6, and switched off until step 3.7 has the agent sending data                                       |
+| What                                                 | How it will travel                                                                                                                                 | State on 2026-11-23                                                                        |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below                                                        | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval                                                         | Running since 2026-11-23: the bootstrap, the plan and the apply, and GitHub's settings     |
+| The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                                                                          | Written in step 3.4. It exists once the owner has approved its first apply                 |
+| The shared services on the host                      | Through the deploy path below: every merge to `main` runs the job "Deploy the shared services", which sends the command `platform-deploy-platform` | From step 3.7. The job deploys `stack/compose.yaml` with `stack/compose.production.yaml`   |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana                                                      | Written in step 3.6, and switched off until step 3.7 has the agent sending data            |
 
 ## The path of a change
 
@@ -26,18 +26,19 @@ flowchart LR
 
 The pipeline is not written here. `.github/workflows/ci.yml` calls the one that `toolkit` holds, at one pinned commit, so this repo is checked exactly as every other repo is. It has four jobs. This repo adds three of its own: one starts the shared services for real, and two plan and apply the infrastructure. One gate passes only when all of them passed:
 
-| Job                   | What it checks                                                                                                                                                                             | Runs on                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| Quality               | `pnpm check`, exactly as on a laptop                                                                                                                                                       | Every pull request and every merge                      |
-| Title                 | The pull request's title is a Conventional Commit                                                                                                                                          | Pull requests                                           |
-| Dependencies          | No dependency the pull request adds has a known flaw                                                                                                                                       | Pull requests                                           |
-| Code scan             | CodeQL finds no vulnerable pattern in our own code or in the workflows                                                                                                                     | Every pull request and every merge                      |
-| Shared services       | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers                                                             | Every pull request and every merge                      |
-| Infrastructure plan   | Signs in to AWS with the read-only role and plans every stack in `infra/`. The plan of each stack shows in the run's summary, which the pull request links to                              | Every pull request of this repo and every merge         |
-| `check`               | Every job above passed                                                                                                                                                                     | Every pull request and every merge                      |
-| Infrastructure apply  | Waits for the owner's approval in GitHub, signs in with the apply role, and applies every stack whose plan changed, except the bootstrap                                                   | A merge whose plan changed a stack the pipeline applies |
-| Observability changes | Decides whether the dashboards and the alert rules go to Grafana Cloud: only when the switch in `observability/push.json` is on and the merge changed `observability/` or `infra/grafana/` | Every merge                                             |
-| Observability push    | Waits for the owner's approval, signs in with the apply role, builds the files, pushes them with gcx and deletes what the files no longer hold in the folder `zigordev`                    | A merge that the job above lets through                 |
+| Job                        | What it checks                                                                                                                                                                             | Runs on                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Quality                    | `pnpm check`, exactly as on a laptop                                                                                                                                                       | Every pull request and every merge                                |
+| Title                      | The pull request's title is a Conventional Commit                                                                                                                                          | Pull requests                                                     |
+| Dependencies               | No dependency the pull request adds has a known flaw                                                                                                                                       | Pull requests                                                     |
+| Code scan                  | CodeQL finds no vulnerable pattern in our own code or in the workflows                                                                                                                     | Every pull request and every merge                                |
+| Shared services            | `pnpm local:up` starts all five on GitHub's machine, pushes the dashboards and the alert rules, and each local address answers                                                             | Every pull request and every merge                                |
+| Infrastructure plan        | Signs in to AWS with the read-only role and plans every stack in `infra/`. The plan of each stack shows in the run's summary, which the pull request links to                              | Every pull request of this repo and every merge                   |
+| `check`                    | Every job above passed                                                                                                                                                                     | Every pull request and every merge                                |
+| Infrastructure apply       | Waits for the owner's approval in GitHub, signs in with the apply role, and applies every stack whose plan changed, except the bootstrap                                                   | A merge whose plan changed a stack the pipeline applies           |
+| Observability changes      | Decides whether the dashboards and the alert rules go to Grafana Cloud: only when the switch in `observability/push.json` is on and the merge changed `observability/` or `infra/grafana/` | Every merge                                                       |
+| Observability push         | Waits for the owner's approval, signs in with the apply role, builds the files, pushes them with gcx and deletes what the files no longer hold in the folder `zigordev`                    | A merge that the job above lets through                           |
+| Deploy the shared services | Runs the deploy workflow of `toolkit` for the target `platform`: the host runs the shared services at the merged commit, and the run ends with the host's result                           | A merge, after the gate, and after the apply when a stack changed |
 
 Every job names the Ubuntu it runs on, exactly: the gate runs on Ubuntu 26.04, and Shared services on Ubuntu 26.04 for arm64, the kind of machine the server will be. No job uses GitHub's `ubuntu-latest`, which GitHub moves to a new version by itself. A new Ubuntu therefore arrives as a pull request from Renovate, and as a major version it waits a month and for the owner. The jobs that `toolkit` holds follow the same rule.
 
@@ -386,6 +387,19 @@ Its last line of output is the result, which the workflow reads:
 | `result=rolled-back`                            | A rollback brought back the version before                                                                                                                                |
 
 The output stays short: a failed step shows only its last 40 lines. The containers' own logs are in Grafana.
+
+### The shared services
+
+The shared services are the target `platform`: `stack/compose.yaml` with `stack/compose.production.yaml`. On the host they are four containers:
+
+| Container      | What it does in production                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `docker-proxy` | The filtered door to Docker, in the group that owns the socket on the host                                                         |
+| `traefik`      | The ingress. It sends each request to the app whose labels name the address                                                        |
+| `alloy`        | The telemetry agent. It sends the apps' traces, metrics and logs, the host's numbers and each container's memory to Grafana Cloud  |
+| `cloudflared`  | The connector of Cloudflare's tunnel. It opens the tunnel outward and hands each request to the ingress, so the host opens no port |
+
+They take no image of ours, so the command carries no images, and each outside image is pinned by its digest. A merge that changes nothing in `stack/` deploys them again too, and compose leaves every unchanged container as it is.
 
 ### What a product's compose files must hold
 

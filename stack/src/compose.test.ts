@@ -5,8 +5,18 @@ import { model, type Service } from '../test/model.ts';
 const everywhere = model(['compose.yaml']);
 const laptop = model(['compose.yaml', 'compose.local.yaml']);
 const withJobs = model(['compose.yaml', 'compose.local.yaml'], 'push');
+const production = model(['compose.yaml', 'compose.production.yaml']);
 
-const services = Object.entries(laptop.services);
+const productionText = readFileSync(new URL('../compose.production.yaml', import.meta.url), 'utf8');
+const productionSecrets = readFileSync(
+  new URL('../.env.production.example', import.meta.url),
+  'utf8'
+);
+
+const services: [string, Service][] = Object.entries(laptop.services);
+const connector = production.services.cloudflared;
+const boxed: [string, Service][] =
+  connector === undefined ? services : [...services, ['cloudflared', connector]];
 const socket = '/var/run/docker.sock';
 
 function seconds(period: string | undefined): number {
@@ -19,7 +29,7 @@ function flags(service: Service | undefined): string[] {
 }
 
 describe('the shared services', () => {
-  it('are five on the laptop, and the three that run everywhere are among them', () => {
+  it('are five on the laptop and four in production, and the three that run everywhere are among them', () => {
     expect(Object.keys(laptop.services).sort()).toEqual([
       'alloy',
       'docker-proxy',
@@ -28,6 +38,12 @@ describe('the shared services', () => {
       'traefik',
     ]);
     expect(Object.keys(everywhere.services).sort()).toEqual(['alloy', 'docker-proxy', 'traefik']);
+    expect(Object.keys(production.services).sort()).toEqual([
+      'alloy',
+      'cloudflared',
+      'docker-proxy',
+      'traefik',
+    ]);
   });
 
   it('form one project with one name, wherever the files are started from', () => {
@@ -41,9 +57,13 @@ describe('the shared services', () => {
   });
 });
 
-describe.each(services)('%s', (name, service) => {
-  it('is pinned to one exact version', () => {
-    expect(service.image).toMatch(/^[\w./-]+:v?\d+\.\d+\.\d+$/);
+describe.each(boxed)('%s', (name, service) => {
+  it('is pinned to one exact version and its digest', () => {
+    expect(service.image).toMatch(/^[\w./-]+:v?\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/);
+  });
+
+  it('comes back by itself when the host restarts, unless someone stopped it', () => {
+    expect(service.restart).toBe('unless-stopped');
   });
 
   it('has a health check', () => {
@@ -141,6 +161,7 @@ describe('the Docker proxy', () => {
     expect(proxy?.user).toBe('65534:0');
     const local = readFileSync(new URL('../compose.local.yaml', import.meta.url), 'utf8');
     expect(local).toMatch(/^ {4}user: "65534:\$\{DOCKER_SOCKET_GROUP:-0\}"$/m);
+    expect(productionText).toMatch(/^ {4}user: "65534:\$\{DOCKER_SOCKET_GROUP\}"$/m);
   });
 
   it('sits on a network of its own, which has no way out', () => {
@@ -216,6 +237,26 @@ describe('the telemetry agent', () => {
         LOKI_DESTINATION: 'http://lgtm:3100/loki/api/v1/push',
       })
     );
+    for (const line of [
+      'OTLP_DESTINATION: ${GRAFANA_OTLP_URL}',
+      'OTLP_USERNAME: ${GRAFANA_STACK_ID}',
+      'OTLP_PASSWORD: ${GRAFANA_ALLOY_TOKEN}',
+      'LOKI_DESTINATION: ${GRAFANA_LOKI_URL}/loki/api/v1/push',
+      'LOKI_USERNAME: ${GRAFANA_LOKI_USER}',
+      'LOKI_PASSWORD: ${GRAFANA_ALLOY_TOKEN}',
+    ]) {
+      expect(productionText).toContain(`      ${line}\n`);
+    }
+    expect(production.services.alloy?.environment?.ALLOY_CONFIG).toBe(config);
+  });
+
+  it("reads each container's memory from the host's file in production, and finds no file on the laptop", () => {
+    expect(config).toContain('set_collectors = ["cpu", "meminfo", "filesystem", "textfile"]');
+    expect(config).toContain('directory = sys.env("TEXTFILE_DIRECTORY")');
+    expect(laptop.services.alloy?.environment?.TEXTFILE_DIRECTORY).toBe('/tmp');
+    expect(production.services.alloy?.environment?.TEXTFILE_DIRECTORY).toBe(
+      '/host/root/var/lib/platform/metrics'
+    );
   });
 
   it('reads the logs of the containers on the two platform networks, and of no other container', () => {
@@ -240,7 +281,7 @@ describe('the telemetry agent', () => {
 
   it('keeps only the machine series that a dashboard or an alert uses', () => {
     expect(config).toContain(
-      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)"'
+      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;"'
     );
     expect(config).toContain('action        = "keep"');
   });
@@ -275,7 +316,8 @@ describe('the job that pushes the dashboards and the alert rules', () => {
   });
 
   it('is boxed in like a service', () => {
-    expect(job?.image).toMatch(/^grafana\/gcx:v\d+\.\d+\.\d+$/);
+    expect(job?.image).toMatch(/^grafana\/gcx:v\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/);
+    expect(job?.restart).toBe('no');
     expect(job?.user).toBe('65532:65532');
     expect(job?.init).toBe(true);
     expect(job?.read_only).toBe(true);
@@ -338,5 +380,52 @@ describe('what only the laptop has', () => {
       expect.objectContaining({ type: 'volume', source: 'lgtm-data', target: '/data' }),
     ]);
     expect(laptop.services.mailpit?.volumes).toBeUndefined();
+  });
+});
+
+describe('what only production has', () => {
+  it("runs the connector of Cloudflare's tunnel there only, beside the ingress, once the ingress is healthy", () => {
+    expect(laptop.services.cloudflared).toBeUndefined();
+    expect(everywhere.services.cloudflared).toBeUndefined();
+    expect(Object.keys(connector?.networks ?? {})).toEqual(['zigordev']);
+    expect(connector?.depends_on?.traefik?.condition).toBe('service_healthy');
+  });
+
+  it('runs the tunnel with its token, and checks itself through the ready address of its own metrics', () => {
+    expect(connector?.command).toEqual([
+      'tunnel',
+      '--metrics',
+      '0.0.0.0:2000',
+      '--grace-period',
+      '20s',
+      'run',
+    ]);
+    expect(productionText).toContain('      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}\n');
+    expect(connector?.healthcheck?.test).toEqual([
+      'CMD',
+      'cloudflared',
+      'tunnel',
+      '--metrics',
+      '127.0.0.1:2000',
+      'ready',
+    ]);
+  });
+
+  it('names every secret it reads in .env.production.example, and nothing more', () => {
+    const used = new Set(
+      [...productionText.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)].map((match) => match[1])
+    );
+    used.delete('DOCKER_SOCKET_GROUP');
+    const named = productionSecrets
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => line.replace(/=$/, ''));
+    expect([...used].sort()).toEqual([...named].sort());
+  });
+
+  it('publishes no port and has no local address', () => {
+    const text = JSON.stringify(production);
+    expect(text).not.toContain('.localhost');
+    expect(text).not.toContain('"published"');
   });
 });

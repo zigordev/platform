@@ -23,17 +23,19 @@ services:
       LOKI_DESTINATION: http://lgtm:3100/loki/api/v1/push
       LOKI_USERNAME: local
       LOKI_PASSWORD: local
+      TEXTFILE_DIRECTORY: /tmp
     labels:
       traefik.enable: "true"
       traefik.http.routers.alloy.rule: Host(`alloy.localhost`)
       traefik.http.services.alloy.loadbalancer.server.port: "12345"
 
   lgtm:
-    image: grafana/otel-lgtm:0.41.1
+    image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
     init: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 30s
+    restart: unless-stopped
     mem_limit: 2g
     cpus: 2
     environment:
@@ -52,13 +54,14 @@ services:
     networks: [zigordev]
 
   mailpit:
-    image: axllent/mailpit:v1.34.0
+    image: axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
     user: "1000:1000"
     init: true
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     stop_grace_period: 10s
+    restart: unless-stopped
     mem_limit: 128m
     cpus: 0.5
     environment:
@@ -78,8 +81,9 @@ services:
     networks: [zigordev]
 
   gcx:
-    image: grafana/gcx:v1.8.0
+    image: grafana/gcx:v1.8.0@sha256:58347c68228ebc5f36a86bfbdbe353c90aa9452cb961da40ec669e00c8361446
     profiles: [push]
+    restart: "no"
     command: [resources, push, --path, /resources, --on-error, abort]
     user: "65532:65532"
     init: true
