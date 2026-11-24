@@ -73,7 +73,7 @@ export function push(folder: string, gcx: Gcx, output: Output): number {
   );
 
   for (const kind of Object.values(managedKinds)) {
-    const listing = gcx(['resources', 'get', kind, '-o', 'json']);
+    const listing = gcx(['resources', 'get', kind, '--limit', '0', '-o', 'json']);
     if (listing.code !== 0) {
       output.err(`push: gcx could not list the ${kind}\n${listing.stderr}`);
       return listing.code;
@@ -98,6 +98,8 @@ export function gcxImage(compose: string): string {
   return image;
 }
 
+const largestAnswer = 64 * 1024 * 1024;
+
 export function dockerGcx(image: string, folder: string): Gcx {
   return (args) => {
     const result = spawnSync(
@@ -120,9 +122,12 @@ export function dockerGcx(image: string, folder: string): Gcx {
         image,
         ...args,
       ],
-      { encoding: 'utf8' }
+      { encoding: 'utf8', maxBuffer: largestAnswer }
     );
-    return { code: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+    const stdout: string | undefined = result.stdout;
+    const stderr: string | undefined = result.stderr;
+    const failure = result.error === undefined ? '' : `${result.error.message}\n`;
+    return { code: result.status ?? 1, stdout: stdout ?? '', stderr: `${stderr ?? ''}${failure}` };
   };
 }
 
