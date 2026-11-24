@@ -45,6 +45,8 @@ resource "github_repository_dependabot_security_updates" "updates" {
 
   repository = github_repository.repo[each.key].name
   enabled    = false
+
+  depends_on = [github_repository_vulnerability_alerts.alerts]
 }
 
 resource "github_workflow_repository_permissions" "token" {
