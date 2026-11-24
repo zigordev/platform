@@ -1,6 +1,6 @@
 # 0019. A deploy is one command per target, and the host checks what it runs
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-24
 - Supersedes: none
 
@@ -18,7 +18,7 @@ docker-rollout v0.14 (MIT, 2026-07-12) starts a service's new container beside t
 
 EC2 takes at most 16 KB of user data. With the deploy script, the host's files came to 35 KB on 2026-11-24, and to 12 KB compressed.
 
-On 2026-11-24 the owner chose where the version record lives ([record 0020](0020-the-host-records-each-deployed-version-in-parameter-store.md)), and how the host gets AWS's command-line tool, in their words: "AWS's snap (Recommended)".
+On 2026-11-24 the owner chose where the version record lives ([record 0020](0020-the-host-records-each-deployed-version-in-parameter-store.md)), and how the host gets AWS's command-line tool, in their words: "AWS's snap (Recommended)". The same day, the owner accepted this design with the pull request that builds it, in their words: "Yes, merge it".
 
 ## Decision
 
