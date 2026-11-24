@@ -54,7 +54,6 @@ case "$op" in
       cat "$store$name"
       echo
     else
-      echo "An error occurred (ParameterNotFound) when calling the GetParameter operation: Parameter $name not found." >&2
       exit 254
     fi
     ;;

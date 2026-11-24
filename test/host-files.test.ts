@@ -98,4 +98,10 @@ describe('the files of the host', () => {
     expect(unit).toContain('After=network-online.target docker.service');
     expect(setup).toContain('systemctl enable --now platform-redeploy.service');
   });
+
+  it('marks the end of the setup before it brings deploys back, so a deploy that arrives early waits for it', () => {
+    const marker = setup.indexOf('> /var/lib/platform/setup-done');
+    expect(marker).toBeGreaterThan(setup.indexOf('docker-compose-plugin git jq'));
+    expect(marker).toBeLessThan(setup.indexOf('systemctl enable --now platform-redeploy.service'));
+  });
 });
