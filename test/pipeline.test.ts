@@ -44,7 +44,14 @@ describe('the pipeline of this repo', () => {
 
   it('names the Ubuntu of each job it runs itself, so that only a pull request moves it', () => {
     const machines = [...caller.matchAll(/^ {4}runs-on: (.+)$/gm)].map((match) => match[1]);
-    expect(machines).toEqual(['ubuntu-26.04-arm', 'ubuntu-26.04', 'ubuntu-26.04', 'ubuntu-26.04']);
+    expect(machines).toEqual([
+      'ubuntu-26.04-arm',
+      'ubuntu-26.04',
+      'ubuntu-26.04',
+      'ubuntu-26.04',
+      'ubuntu-26.04',
+      'ubuntu-26.04',
+    ]);
   });
 
   it('runs on every pull request and on every merge to main', () => {
@@ -179,6 +186,43 @@ describe('the infrastructure apply', () => {
 
   it('applies with the script, which leaves the bootstrap to the laptop', () => {
     expect(apply).toContain('run: infra/run.sh apply\n');
+  });
+});
+
+describe('the push of dashboards and alerts to Grafana Cloud', () => {
+  const decide = job('observability-changes');
+  const push = job('observability-push');
+  const toggle = JSON.parse(read('../observability/push.json')) as {
+    grafanaCloud: boolean;
+    removeBy: string;
+  };
+
+  it('decides on main only, from the switch and from what the merge changed', () => {
+    expect(decide).toContain("if: github.event_name == 'push'\n");
+    expect(decide).toContain('enabled="$(jq -r .grafanaCloud observability/push.json)"\n');
+    expect(decide).toContain(
+      'changed="$(git diff --name-only HEAD~1 HEAD -- observability infra/grafana)"\n'
+    );
+    expect(decide).toContain('    permissions:\n      contents: read\n    outputs:\n');
+  });
+
+  it('waits for the owner in the environment that the apply role trusts, after the gate and the apply', () => {
+    expect(push).toContain('environment: infrastructure\n');
+    expect(push).toContain('needs: [check, infra-apply, observability-changes]\n');
+    expect(push).toContain("needs.observability-changes.outputs.push == 'true'");
+    expect(push).toContain("needs.check.result == 'success'");
+    expect(push).toContain('role/platform-opentofu-apply\n');
+  });
+
+  it('hides the token in the log, and pushes with the package that builds the files', () => {
+    expect(push).toContain('echo "::add-mask::$GRAFANA_TOKEN"\n');
+    expect(push).toContain('pnpm --filter platform-observability run build\n');
+    expect(push).toContain('pnpm --filter platform-observability run push\n');
+  });
+
+  it('is switched off until the agent sends data, by a switch that must go before its date', () => {
+    expect(typeof toggle.grafanaCloud).toBe('boolean');
+    expect(Date.parse(toggle.removeBy)).toBeGreaterThan(Date.now());
   });
 });
 

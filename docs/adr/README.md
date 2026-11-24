@@ -27,3 +27,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0015](0015-the-owner-stores-the-tunnels-token.md)                                     | The owner stores the tunnel's token                                        | 2026-11-24 | accepted |
 | [0016](0016-the-code-makes-grafanas-tokens-from-the-owners-one-token.md)               | The code makes Grafana's tokens from the owner's one token                 | 2026-11-24 | accepted |
 | [0017](0017-the-shared-services-reach-the-host-through-the-deploy-path.md)             | The shared services reach the host through the deploy path                 | 2026-11-24 | accepted |
+| [0018](0018-dashboards-and-alerts-reach-grafana-cloud-once-the-agent-sends-data.md)    | Dashboards and alerts reach Grafana Cloud once the agent sends data        | 2026-11-24 | accepted |

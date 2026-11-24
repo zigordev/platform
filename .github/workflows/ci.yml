@@ -176,3 +176,71 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: infra/run.sh apply
+
+  observability-changes:
+    name: Observability changes
+    if: github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      push: ${{ steps.decide.outputs.push }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Decide whether the dashboards and alerts go to Grafana Cloud
+        id: decide
+        run: |
+          enabled="$(jq -r .grafanaCloud observability/push.json)"
+          changed="$(git diff --name-only HEAD~1 HEAD -- observability infra/grafana)"
+          if [ "$enabled" = "true" ] && [ -n "$changed" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "The switch is $enabled, and the merge changed: ${changed:-nothing that is pushed}"
+
+  observability-push:
+    name: Observability push
+    needs: [check, infra-apply, observability-changes]
+    if: always() && needs.check.result == 'success' && needs.observability-changes.outputs.push == 'true' && (needs.infra-apply.result == 'success' || needs.infra-apply.result == 'skipped')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: infrastructure
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the dashboards and the alert rules
+        run: pnpm --filter platform-observability run build
+
+      - name: Sign in to AWS with the apply role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/platform-opentofu-apply
+          role-session-name: platform-observability-${{ github.run_id }}
+          aws-region: eu-west-1
+          mask-aws-account-id: true
+
+      - name: Push them to Grafana Cloud, and delete what the files no longer hold
+        run: |
+          GRAFANA_SERVER="$(aws ssm get-parameter --name /platform/GRAFANA_URL --query Parameter.Value --output text)"
+          GRAFANA_TOKEN="$(aws ssm get-parameter --name /platform/GRAFANA_STACK_TOKEN --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          export GRAFANA_SERVER GRAFANA_TOKEN
+          pnpm --filter platform-observability run push
