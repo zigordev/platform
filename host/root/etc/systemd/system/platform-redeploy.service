@@ -1,0 +1,13 @@
+[Unit]
+Description=Brings back every recorded deploy that the host does not run
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/platform-deploy --redeploy-recorded
+TimeoutStartSec=45min
+
+[Install]
+WantedBy=multi-user.target

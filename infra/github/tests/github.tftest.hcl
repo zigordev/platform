@@ -136,6 +136,30 @@ run "packages_are_published_from_main_only" {
   }
 }
 
+run "a_repo_that_deploys_does_so_from_main_only_through_the_environment_production" {
+  command = plan
+
+  assert {
+    condition     = keys(github_repository_environment.production) == ["platform"]
+    error_message = "Only a repo that deploys has the environment production. Today that is platform, for the shared services."
+  }
+
+  assert {
+    condition = alltrue([
+      for environment in github_repository_environment.production :
+      environment.environment == "production" &&
+      environment.deployment_branch_policy[0].custom_branch_policies &&
+      !environment.deployment_branch_policy[0].protected_branches
+    ])
+    error_message = "The environment production runs only from the branches its policy names."
+  }
+
+  assert {
+    condition     = alltrue([for policy in github_repository_environment_deployment_policy.production_main : policy.branch_pattern == "main"])
+    error_message = "The environment production runs from main only, so only main can sign in with a deploy role."
+  }
+}
+
 run "every_repo_has_the_label_that_lets_a_destructive_migration_through" {
   command = plan
 

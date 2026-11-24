@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf 'aws %s\n' "$*" >> "$FAKE_DIR/aws-calls"
+store="$FAKE_AWS"
+
+if [ -f "$FAKE_DIR/fail/aws" ]; then
+  echo "Could not connect to the endpoint URL" >&2
+  exit 255
+fi
+
+op=""
+name=""
+names=""
+value=""
+path=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --region | --query | --output | --type) shift 2 ;;
+    --overwrite | --with-decryption | ssm) shift ;;
+    --name)
+      name="$2"
+      shift 2
+      ;;
+    --value)
+      value="$2"
+      shift 2
+      ;;
+    --path)
+      path="$2"
+      shift 2
+      ;;
+    --names)
+      shift
+      while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do
+        names="$names $1"
+        shift
+      done
+      ;;
+    get-parameter | get-parameters | put-parameter | get-parameters-by-path)
+      op="$1"
+      shift
+      ;;
+    *)
+      echo "unexpected argument $1" >&2
+      exit 64
+      ;;
+  esac
+done
+
+case "$op" in
+  get-parameter)
+    if [ -f "$store$name" ]; then
+      cat "$store$name"
+      echo
+    else
+      echo "An error occurred (ParameterNotFound) when calling the GetParameter operation: Parameter $name not found." >&2
+      exit 254
+    fi
+    ;;
+  get-parameters)
+    found="[]"
+    missing="[]"
+    for each in $names; do
+      if [ -f "$store$each" ]; then
+        found="$(jq -c --arg name "$each" --rawfile value "$store$each" '. + [{Name: $name, Value: $value}]' <<< "$found")"
+      else
+        missing="$(jq -c --arg name "$each" '. + [$name]' <<< "$missing")"
+      fi
+    done
+    jq -n --argjson found "$found" --argjson missing "$missing" '{Parameters: $found, InvalidParameters: $missing}'
+    ;;
+  put-parameter)
+    mkdir -p "$(dirname "$store$name")"
+    printf '%s' "$value" > "$store$name"
+    ;;
+  get-parameters-by-path)
+    list="[]"
+    if [ -d "$store$path" ]; then
+      for file in "$store$path"/*; do
+        if [ -f "$file" ]; then
+          list="$(jq -c --arg name "$path/$(basename "$file")" --rawfile value "$file" '. + [{Name: $name, Value: $value}]' <<< "$list")"
+        fi
+      done
+    fi
+    jq -n --argjson list "$list" '{Parameters: $list}'
+    ;;
+  *)
+    echo "unexpected command" >&2
+    exit 64
+    ;;
+esac

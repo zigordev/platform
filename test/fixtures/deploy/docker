@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fake="$FAKE_DIR"
+printf 'docker %s | VERSION=%s\n' "$*" "${VERSION:-}" >> "$fake/calls"
+
+seen() {
+  if [ -n "${FAKE_SECRET_NAME:-}" ]; then
+    printf '%s %s\n' "$1" "${!FAKE_SECRET_NAME:-}" >> "$fake/secrets-seen"
+  fi
+}
+
+version_of() {
+  local base
+  base="$(basename "$1")"
+  case "$base" in
+    rendered-*.yaml)
+      base="${base%.yaml}"
+      printf '%s' "${base##*-}"
+      ;;
+    *) basename "$(dirname "$1")" ;;
+  esac
+}
+
+mark_running() {
+  mkdir -p "$fake/running/$1"
+  printf 'id-%s-%s\n' "$2" "${3:0:7}" > "$fake/running/$1/$2"
+}
+
+if [ "$1" = "compose" ]; then
+  shift
+  project=""
+  first_file=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --project-name)
+        project="$2"
+        shift 2
+        ;;
+      --file)
+        if [ -z "$first_file" ]; then
+          first_file="$2"
+        fi
+        shift 2
+        ;;
+      *) break ;;
+    esac
+  done
+  sub="$1"
+  shift
+  case "$sub" in
+    config)
+      kind="render"
+      for arg in "$@"; do
+        if [ "$arg" = "--format" ]; then
+          kind="json"
+        fi
+      done
+      seen "config-$kind"
+      release="$(basename "$(dirname "$first_file")")"
+      if [ -f "$fake/config/$release.json" ]; then
+        cat "$fake/config/$release.json"
+      else
+        echo "no configuration for $release" >&2
+        exit 15
+      fi
+      ;;
+    ps)
+      service=""
+      for service in "$@"; do :; done
+      if [ -f "$fake/running/$project/$service" ]; then
+        cat "$fake/running/$project/$service"
+      fi
+      ;;
+    pull)
+      if [ -f "$fake/fail/pull" ]; then
+        echo "pull access denied"
+        exit 1
+      fi
+      ;;
+    up)
+      seen up
+      services=""
+      job=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --exit-code-from)
+            job="$2"
+            shift 2
+            ;;
+          --wait-timeout) shift 2 ;;
+          --*) shift ;;
+          *)
+            services="$services $1"
+            shift
+            ;;
+        esac
+      done
+      if [ -n "$job" ]; then
+        if [ -f "$fake/fail/job-$job" ]; then
+          echo "the migration failed"
+          exit 3
+        fi
+        exit 0
+      fi
+      for service in $services; do
+        mark_running "$project" "$service" "$(version_of "$first_file")"
+        if [ -f "$fake/fail/up-$service" ]; then
+          echo "container $service is unhealthy"
+          exit 1
+        fi
+      done
+      ;;
+    rm)
+      for service in "$@"; do
+        case "$service" in
+          --*) ;;
+          *) rm -f "$fake/running/$project/$service" ;;
+        esac
+      done
+      ;;
+    *)
+      echo "unexpected compose command $sub" >&2
+      exit 64
+      ;;
+  esac
+  exit 0
+fi
+
+case "$1" in
+  rollout)
+    shift
+    project=""
+    service=""
+    file=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --project-name)
+          project="$2"
+          shift 2
+          ;;
+        --file)
+          file="$2"
+          shift 2
+          ;;
+        --timeout) shift 2 ;;
+        *)
+          service="$1"
+          shift
+          ;;
+      esac
+    done
+    seen rollout
+    if [ -f "$fake/fail/rollout-$service" ]; then
+      i=0
+      while [ "$i" -lt 500 ]; do
+        echo "log line $i of the new container"
+        i=$((i + 1))
+      done
+      echo "==> New containers are not healthy. Rolling back." >&2
+      exit 1
+    fi
+    mark_running "$project" "$service" "$(version_of "$file")"
+    ;;
+  pull)
+    if [ -f "$fake/fail/pull" ]; then
+      echo "pull access denied" >&2
+      exit 1
+    fi
+    ;;
+  tag | stop) ;;
+  rm)
+    shift
+    for id in "$@"; do
+      for file in $(grep -rlx -- "$id" "$fake/running" 2> /dev/null || true); do
+        rm -f "$file"
+      done
+    done
+    ;;
+  ps)
+    shift
+    project=""
+    service=""
+    status=""
+    format=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --filter)
+          case "$2" in
+            label=com.docker.compose.project=*) project="${2#label=com.docker.compose.project=}" ;;
+            label=com.docker.compose.service=*) service="${2#label=com.docker.compose.service=}" ;;
+            status=*) status="yes" ;;
+          esac
+          shift 2
+          ;;
+        --format)
+          format="$2"
+          shift 2
+          ;;
+        *) shift ;;
+      esac
+    done
+    if [ -n "$status" ]; then
+      if [ -f "$fake/stopped/$project/$service" ]; then
+        cat "$fake/stopped/$project/$service"
+      fi
+      exit 0
+    fi
+    if [ ! -d "$fake/running/$project" ]; then
+      exit 0
+    fi
+    if [ -n "$format" ]; then
+      ls "$fake/running/$project"
+    elif [ -n "$service" ]; then
+      if [ -f "$fake/running/$project/$service" ]; then
+        cat "$fake/running/$project/$service"
+      fi
+    else
+      for file in "$fake/running/$project"/*; do
+        if [ -f "$file" ]; then
+          cat "$file"
+        fi
+      done
+    fi
+    ;;
+  *)
+    echo "unexpected docker command $1" >&2
+    exit 64
+    ;;
+esac
