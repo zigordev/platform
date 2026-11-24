@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fake="$FAKE_DIR"
-printf 'docker %s | VERSION=%s\n' "$*" "${VERSION:-}" >> "$fake/calls"
+printf 'docker %s | VERSION=%s GROUP=%s\n' "$*" "${VERSION:-}" "${DOCKER_SOCKET_GROUP:-}" >> "$fake/calls"
 
 seen() {
   if [ -n "${FAKE_SECRET_NAME:-}" ]; then
