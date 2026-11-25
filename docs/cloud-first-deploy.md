@@ -11,6 +11,7 @@ Production is built in phase 3, and this page grows with it. Today it says what 
 | The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                                                                          | Written in step 3.4. It exists once the owner has approved its first apply                 |
 | The shared services on the host                      | Through the deploy path below: every merge to `main` runs the job "Deploy the shared services", which sends the command `platform-deploy-platform` | From step 3.7. The job deploys `stack/compose.yaml` with `stack/compose.production.yaml`   |
 | The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana                                                      | Written in step 3.6, and switched on in step 3.7, on 2026-11-24, once the agent sent data  |
+| The backups                                          | The stack `infra/backups`: the bucket for the dumps, its key and lock, and the daily snapshot of the data disk                                     | Written in step 3.8 on 2026-11-25. It exists once the owner has approved its apply         |
 
 ## The path of a change
 
@@ -446,6 +447,33 @@ The deploy workflow asks the public address which version answers. On a wrong an
 ### What deploys cost
 
 Nothing. AWS's pricing page of 2026-11-24 says that Systems Manager's commands on EC2 and standard parameters come at no additional charge.
+
+## Backups
+
+Backups are step 3.8 of the build plan, in the stack `infra/backups`. Toolkit's [record 0023](https://github.com/zigordev/toolkit/blob/main/docs/adr/0023-hourly-backups-and-a-monthly-restore-test.md) sets their targets: at most 1 hour of data lost, and everything running again within 1 hour.
+
+### What is kept, and for how long
+
+| What                                                | Where                                                                                        | Kept                               | Who can delete it                                                                                                                                                                                     |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The hourly dump of every database                   | The bucket `zigordev-platform-backups`, encrypted with its own key, `alias/platform-backups` | 30 days, then it expires by itself | Nobody before its 30 days are over, the root user included: S3 Object Lock in compliance mode. [Record 0024](adr/0024-database-dumps-are-locked-for-30-days-and-nobody-can-lift-the-lock.md) says why |
+| A snapshot of the data disk, every day at 01:00 UTC | EBS snapshots that Data Lifecycle Manager makes, tagged `made-by = data-lifecycle-manager`   | The 7 newest                       | An administrator. The locked dumps would still be there. [Record 0025](adr/0025-data-lifecycle-manager-snapshots-the-data-disk-every-day.md) says why                                                 |
+
+The host may add, read and list dumps, through the policy `backups` on its role. It may never delete a dump, change a lock or touch the bucket's settings. The bucket and its key are never destroyed by code.
+
+The host's hourly dump and the monthly restore test arrive in the next part of step 3.8. Until then the bucket stays empty.
+
+### How to check the backups
+
+| Command                                                                                                                                                                                                 | What it shows                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `aws ec2 describe-snapshots --profile platform-ops --region eu-west-1 --owner-ids self --filters Name=tag:made-by,Values=data-lifecycle-manager --query 'Snapshots[].[StartTime,State]' --output table` | The snapshots of the data disk |
+| `aws s3api get-object-lock-configuration --profile platform-ops --region eu-west-1 --bucket zigordev-platform-backups`                                                                                  | The lock and its 30 days       |
+| `aws s3 ls --profile platform-ops --region eu-west-1 --recursive s3://zigordev-platform-backups/ \| tail`                                                                                               | The newest dumps               |
+
+### What backups cost
+
+At AWS's prices of 2026-11-25 in Ireland, the key costs $1 a month. A dump costs $0.023 per GB-month and $0.005 per 1,000 uploads, so even 10 MB an hour stays under 20 cents a month. A snapshot costs $0.05 per GB-month for the blocks it stores, and each one stores only what changed, so the 10 GB disk stays well under $1 a month. Data Lifecycle Manager and the lock cost nothing more.
 
 ## The settings on GitHub
 
