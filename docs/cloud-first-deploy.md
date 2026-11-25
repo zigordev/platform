@@ -146,6 +146,10 @@ Every stack in `infra/` is code, and every change to it is a pull request. Nothi
 | The approval              | The job signs in with the apply role, for one hour at most, and applies every changed stack                                                                                                  | Nobody                                                                                   |
 | Every Monday at 06:17 UTC | The workflow "Drift" plans every stack, the bootstrap included. When any stack differs from its code, the run fails, and GitHub emails the owner                                             | The owner reads the summary, then undoes the hand-made change or writes it into the code |
 
+Runs on `main` go one at a time: the workflow's concurrency group holds a later run until the earlier one ends. So a run that waits for the owner's approval holds back every later merge. Only one run waits behind it: a newer merge replaces the older run that has not started yet, and the newer run's plan holds both changes, because its commit holds both.
+
+GitHub can lose an approval request. On 2026-11-24 the job "Infrastructure apply" showed "Starting job" for 15 minutes, with no machine and nothing to approve. Re-running its cancelled job on 2026-11-25 did not help: GitHub cancelled the re-run in the same second it started. Cancel such a run on its page, then merge the next change. Its new run plans the same changes again and asks for the approval anew. The workflow has no manual start, so when nothing else is ready to merge, a small fix to the docs is that change.
+
 The bootstrap is the one stack the pipeline never applies: [record 0005](adr/0005-the-bootstrap-is-applied-from-the-laptop-only.md) says why. Its plan still shows on every pull request, and its summary says to apply it from the laptop.
 
 The pipeline finds the roles by their full name, which holds the account number. The number is in neither git nor the logs: the owner set it once as the repository secret `AWS_ACCOUNT_ID`, and GitHub hides a secret in every log line. [Record 0007](adr/0007-the-aws-account-number-lives-in-a-github-secret.md) says why.
