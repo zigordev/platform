@@ -163,15 +163,15 @@ One server runs every product: the host. It is step 3.4 of the build plan, the s
 
 ### What it is
 
-| Part               | What it is                                                                                                                                                                                                                                                       |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The network        | Its own network, `platform` (10.20.0.0/16), with one subnet in `eu-west-1a` and a way out to the internet. The network's default security group holds no rule                                                                                                    |
-| The security group | `platform-host`. It lets nothing in, and lets the host reach out to anywhere, for updates, images and AWS's own services                                                                                                                                         |
-| The server         | `platform-host`, a t4g.small: 2 Arm processors and 2 GiB of memory. Its processor credits are capped, so a runaway process slows down instead of costing money                                                                                                   |
-| The image          | Canonical's Ubuntu 26.04 LTS for Arm, the newest one when the host is built                                                                                                                                                                                      |
-| The system disk    | 20 GB of encrypted gp3. It holds Ubuntu, Docker and the images, and goes with the server                                                                                                                                                                         |
-| The data disk      | `platform-data`: 10 GB of encrypted gp3, mounted at `/srv/data`. Every Docker volume lives on it. It outlives the server, and the code refuses to delete it                                                                                                      |
-| The role           | `platform-host`. It lets AWS Systems Manager reach the host. `infra/deploy` lets it read the secrets that each deploy names and keep the deploy records, and nothing else. [Record 0011](adr/0011-the-only-way-into-the-host-is-aws-systems-manager.md) says why |
+| Part               | What it is                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The network        | Its own network, `platform` (10.20.0.0/16), with one subnet in `eu-west-1a` and a way out to the internet. The network's default security group holds no rule                                                                                                                                                                                              |
+| The security group | `platform-host`. It lets nothing in, and lets the host reach out to anywhere, for updates, images and AWS's own services                                                                                                                                                                                                                                   |
+| The server         | `platform-host`, a t4g.medium: 2 Arm processors and 4 GiB of memory, since the Kafka broker arrived, as [toolkit's record 0043](https://github.com/zigordev/toolkit/blob/main/docs/adr/0043-the-host-steps-up-to-a-t4g-medium-when-the-broker-arrives.md) says. Its processor credits are capped, so a runaway process slows down instead of costing money |
+| The image          | Canonical's Ubuntu 26.04 LTS for Arm, the newest one when the host is built                                                                                                                                                                                                                                                                                |
+| The system disk    | 20 GB of encrypted gp3. It holds Ubuntu, Docker and the images, and goes with the server                                                                                                                                                                                                                                                                   |
+| The data disk      | `platform-data`: 10 GB of encrypted gp3, mounted at `/srv/data`. Every Docker volume lives on it. It outlives the server, and the code refuses to delete it                                                                                                                                                                                                |
+| The role           | `platform-host`. It lets AWS Systems Manager reach the host. `infra/deploy` lets it read the secrets that each deploy names and keep the deploy records, and nothing else. [Record 0011](adr/0011-the-only-way-into-the-host-is-aws-systems-manager.md) says why                                                                                           |
 
 ### What runs on it
 
@@ -223,6 +223,8 @@ A change to any file under `host/root`, or to the user data, rebuilds the host. 
 
 To rebuild the host on purpose, for example when it misbehaves and a restart does not help, raise the number in `host/root/etc/platform/generation` through a pull request. Nothing reads the number: it changes the user data, and that rebuilds the host. On the host, `cat /etc/platform/generation` tells which generation runs. [Record 0023](adr/0023-the-host-is-rebuilt-on-purpose-by-raising-its-generation.md) says why.
 
+A new size, in `instance_type` in `infra/host/locals.tf`, does not rebuild the host. The plan says the instance is "updated in-place". After the owner's approval, AWS stops the host, which stops every container cleanly, changes its size and starts it again. Both disks stay as they are, the containers come back by themselves, and the products are away for a few minutes. The host also gets a new public address, which nothing depends on, because the host opens no port. [Toolkit's record 0043](https://github.com/zigordev/toolkit/blob/main/docs/adr/0043-the-host-steps-up-to-a-t4g-medium-when-the-broker-arrives.md) says when the size steps up.
+
 A new host's first boot often misses its setup. Ubuntu's cloud images start without their boot image, so the network driver loads from the new disk, and AWS copies a new disk's blocks from storage on their first read. On 2026-11-23 the driver arrived 3 seconds after cloud-init looked for a network card, and cloud-init went on with no setup. Within minutes the repair restarts the first boot, which then finds its setup, so a rebuild takes about 15 minutes instead of 5.
 
 A new encrypted AWS disk does not read as zeros. On 2026-11-24 the new data disk read as random bytes everywhere after its first 4 KB, so only its missing signature tells that it is new, as AWS's own guide to a new volume says.
@@ -233,17 +235,17 @@ A newer Ubuntu image does not rebuild the host, because the automatic updates ke
 
 ### What the host costs
 
-Measured against AWS's own price list for Ireland on 2026-11-23, for a month of 730 hours:
+Measured against AWS's own price list for Ireland on 2026-11-23, and for the server on 2026-11-25, for a month of 730 hours:
 
-| Part               | Price                                                                                                                                | A month                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| The server         | $0.0184 an hour. AWS's free trial covers 750 hours of t4g.small a month until 2026-12-31                                             | $13.43, and $0 until 2026-12-31 |
-| The system disk    | 20 GB at $0.088 per GB a month                                                                                                       | $1.76                           |
-| The data disk      | 10 GB at $0.088 per GB a month                                                                                                       | $0.88                           |
-| The public address | $0.005 an hour. The host needs one to reach GitHub, its image registry and Systems Manager, which have no IPv6 address on 2026-11-23 | $3.65                           |
-| Systems Manager    | AWS: "No additional charges for usage on Amazon EC2 instances"                                                                       | $0                              |
+| Part               | Price                                                                                                                                | A month |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| The server         | $0.0368 an hour for a t4g.medium. AWS's free trial until 2026-12-31 covers only the t4g.small, so it does not apply                  | $26.86  |
+| The system disk    | 20 GB at $0.088 per GB a month                                                                                                       | $1.76   |
+| The data disk      | 10 GB at $0.088 per GB a month                                                                                                       | $0.88   |
+| The public address | $0.005 an hour. The host needs one to reach GitHub, its image registry and Systems Manager, which have no IPv6 address on 2026-11-23 | $3.65   |
+| Systems Manager    | AWS: "No additional charges for usage on Amazon EC2 instances"                                                                       | $0      |
 
-So the host costs $6.29 a month until 2026-12-31, and $19.72 a month from 2027-01-01, unless AWS extends its free trial again. The trial does not cover surplus processor credits, which the capped credits rule out.
+So the host costs $33.15 a month. As a t4g.small it cost $6.29 a month during the free trial, and $19.72 after it: the step to 4 GiB adds $13.43 a month at list price. The capped credits rule out a charge for surplus processor credits.
 
 ## Cloudflare
 
