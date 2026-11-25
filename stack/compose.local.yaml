@@ -45,6 +45,23 @@ services:
     profiles: [setup]
     environment:
       KAFKA_SETUP_PASSWORD: local-only-setup
+      KAFKA_SETUP_LAPTOP: |
+        user notifications-api
+        allow notifications-api Read topic notifications.requests. prefixed
+        allow notifications-api Write topic notifications.outcomes. prefixed
+        allow notifications-api Read group notifications-api. prefixed
+        user template-api
+        topic notifications.requests.template-api 1
+        topic notifications.requests.template-api.dead-letter 1
+        topic notifications.outcomes.template-api 1
+        topic notifications.outcomes.template-api.dead-letter 1
+        allow template-api Write topic notifications.requests.template-api
+        allow template-api Read topic notifications.outcomes.template-api
+        allow template-api Write topic notifications.outcomes.template-api.dead-letter
+        allow template-api Read group template-api. prefixed
+        allow notifications-api Write topic notifications.requests.template-api.dead-letter
+      KAFKA_PASSWORD_NOTIFICATIONS_API: local-only-notifications-api
+      KAFKA_PASSWORD_TEMPLATE_API: local-only-template-api
 
   lgtm:
     image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
