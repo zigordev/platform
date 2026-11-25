@@ -36,7 +36,14 @@ export const platformPanels = {
   ingressSlowest: 9,
   reporting: 10,
   linesByService: 11,
+  dumpAge: 12,
+  restoreTestAge: 13,
 } as const;
+
+export const newestDumpAge =
+  'time() - max by (compose_project) (platform_backup_last_success_timestamp_seconds)';
+export const lastRestoreTestAge =
+  'time() - max by (compose_project) (platform_restore_test_last_success_timestamp_seconds)';
 
 const one = 'service_name="$app"';
 const requests = `http_server_request_duration_seconds_count{${one}`;
@@ -212,6 +219,20 @@ export function platformRows(): Row[] {
             legend: '{{service_name}}',
           },
         ]),
+      ],
+    },
+    {
+      title: 'Backups',
+      panels: [
+        overTime(platformPanels.dumpAge, 'Age of the newest dump, by product', 's', [
+          { expr: newestDumpAge, legend: '{{compose_project}}' },
+        ]),
+        overTime(
+          platformPanels.restoreTestAge,
+          'Age of the last good restore test, by product',
+          's',
+          [{ expr: lastRestoreTestAge, legend: '{{compose_project}}' }]
+        ),
       ],
     },
   ];

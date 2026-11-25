@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { alerts, slowestAllowed } from './alerts.ts';
+import { alerts, oldestDumpAllowed, oldestRestoreTestAllowed, slowestAllowed } from './alerts.ts';
 import { appPanels, platformPanels } from './dashboards.ts';
 
 const runbookFolder = fileURLToPath(new URL('../../docs/runbooks/', import.meta.url));
@@ -15,11 +15,13 @@ function alert(uid: string) {
 }
 
 describe('the alerts', () => {
-  it('are four, each with a name of its own', () => {
+  it('are six, each with a name of its own', () => {
     expect(alerts.map((one) => one.uid)).toEqual([
       'app-answers-with-errors',
       'app-is-slow',
       'host-is-filling-up',
+      'backup-is-too-old',
+      'restore-test-is-too-old',
       'telemetry-went-silent',
     ]);
     expect(new Set(alerts.map((one) => one.title)).size).toBe(alerts.length);
@@ -86,6 +88,39 @@ describe('a host that is filling up', () => {
     );
     expect(one.expr).toContain(' or ');
     expect(one.expr.endsWith('> 0.8')).toBe(true);
+  });
+});
+
+describe('a backup that is too old', () => {
+  const one = alert('backup-is-too-old');
+
+  it("means a product's newest dump has been older than 2 hours for 5 minutes, as toolkit's record 0023 says", () => {
+    expect(oldestDumpAllowed).toBe(7200);
+    expect(one.expr).toBe(
+      '(time() - max by (compose_project) (platform_backup_last_success_timestamp_seconds)) > 7200'
+    );
+    expect(one.for).toBe('5m');
+  });
+
+  it('names the product, and stays quiet through one dump that failed and the next that passed', () => {
+    expect(one.summary).toContain('{{ $labels.compose_project }}');
+    expect(one.for).not.toBe('0s');
+  });
+});
+
+describe('a restore test that is too old', () => {
+  const one = alert('restore-test-is-too-old');
+
+  it("means a product's last good restore test is older than 35 days, as toolkit's record 0023 says", () => {
+    expect(oldestRestoreTestAllowed).toBe(3024000);
+    expect(one.expr).toBe(
+      '(time() - max by (compose_project) (platform_restore_test_last_success_timestamp_seconds)) > 3024000'
+    );
+  });
+
+  it('fires at once, also for a product whose dumps never restored, which the host reports as 0', () => {
+    expect(one.for).toBe('0s');
+    expect(one.summary).toContain('{{ $labels.compose_project }}');
   });
 });
 

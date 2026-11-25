@@ -76,6 +76,7 @@ describe.each([
       'event',
       'device',
       'service',
+      'compose_project',
     ];
     for (const query of queries(model)) {
       for (const label of grouped(query)) {
@@ -138,8 +139,17 @@ describe('the platform dashboard', () => {
     expect(platform.templating?.list ?? []).toEqual([]);
   });
 
-  it('shows the machine, the ingress and the telemetry itself', () => {
-    expect(rows(platform)).toEqual(['The machine', 'The ingress', 'Telemetry']);
+  it('shows the machine, the ingress, the telemetry itself and the backups', () => {
+    expect(rows(platform)).toEqual(['The machine', 'The ingress', 'Telemetry', 'Backups']);
+  });
+
+  it("shows how old each product's newest dump and last good restore test are", () => {
+    expect(question(platform, platformPanels.dumpAge)).toBe(
+      'time() - max by (compose_project) (platform_backup_last_success_timestamp_seconds)'
+    );
+    expect(question(platform, platformPanels.restoreTestAge)).toBe(
+      'time() - max by (compose_project) (platform_restore_test_last_success_timestamp_seconds)'
+    );
   });
 
   it('counts a disk once, however many folders it is mounted at', () => {

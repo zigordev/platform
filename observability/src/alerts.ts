@@ -1,4 +1,4 @@
-import { appPanels, platformPanels } from './dashboards.ts';
+import { appPanels, lastRestoreTestAge, newestDumpAge, platformPanels } from './dashboards.ts';
 import type { Alert } from './resources.ts';
 
 const apps = 'service_name!="traefik"';
@@ -6,6 +6,8 @@ const requests = 'http_server_request_duration_seconds_count';
 const buckets = 'http_server_request_duration_seconds_bucket';
 
 export const slowestAllowed = 1;
+export const oldestDumpAllowed = 2 * 60 * 60;
+export const oldestRestoreTestAllowed = 35 * 24 * 60 * 60;
 
 export const alerts: readonly Alert[] = [
   {
@@ -44,6 +46,32 @@ export const alerts: readonly Alert[] = [
     runbook: 'host-is-filling-up.md',
     dashboard: 'platform',
     panel: platformPanels.machineOverTime,
+  },
+  {
+    uid: 'backup-is-too-old',
+    title: 'A backup is too old',
+    summary:
+      'The newest dump of {{ $labels.compose_project }} is more than 2 hours old, so more than an hour of its data could be lost',
+    expr: `(${newestDumpAge}) > ${oldestDumpAllowed}`,
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'email',
+    runbook: 'backup-is-too-old.md',
+    dashboard: 'platform',
+    panel: platformPanels.dumpAge,
+  },
+  {
+    uid: 'restore-test-is-too-old',
+    title: 'A restore test is too old',
+    summary:
+      'The last good restore test of {{ $labels.compose_project }} is more than 35 days old, so nobody knows whether its dumps restore',
+    expr: `(${lastRestoreTestAge}) > ${oldestRestoreTestAllowed}`,
+    lookBack: '10m',
+    for: '0s',
+    reaches: 'email',
+    runbook: 'restore-test-is-too-old.md',
+    dashboard: 'platform',
+    panel: platformPanels.restoreTestAge,
   },
   {
     uid: 'telemetry-went-silent',

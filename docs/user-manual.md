@@ -21,7 +21,7 @@ Everything else comes from here, with no line of setup in the product:
 | Its logs, traces and metrics in Grafana | One agent collects them from every container the same way                     | Yes                                             |
 | A place that catches its email          | The mail catcher takes whatever is sent to it on the laptop                   | Yes                                             |
 | Its dashboard                           | The dashboard asks the data which apps exist                                  | Yes                                             |
-| The standard alerts                     | Each rule covers every app at once                                            | Four of ten                                     |
+| The standard alerts                     | Each rule covers every app at once                                            | Six of ten                                      |
 | Its backups                             | The backup job finds a database by a label in the product's compose file      | Yes, every hour, and a restore test every month |
 
 ## Being served on the laptop
