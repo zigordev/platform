@@ -5,6 +5,7 @@ import { model, type Service } from '../test/model.ts';
 const everywhere = model(['compose.yaml']);
 const laptop = model(['compose.yaml', 'compose.local.yaml']);
 const withJobs = model(['compose.yaml', 'compose.local.yaml'], 'push');
+const withSetup = model(['compose.yaml', 'compose.local.yaml'], 'setup');
 const production = model(['compose.yaml', 'compose.production.yaml']);
 
 const productionText = readFileSync(new URL('../compose.production.yaml', import.meta.url), 'utf8');
@@ -29,19 +30,28 @@ function flags(service: Service | undefined): string[] {
 }
 
 describe('the shared services', () => {
-  it('are five on the laptop and four in production, and the three that run everywhere are among them', () => {
+  it("are six on the laptop and five in production, the four that run everywhere among them, beside Kafka's job", () => {
     expect(Object.keys(laptop.services).sort()).toEqual([
       'alloy',
       'docker-proxy',
+      'kafka',
       'lgtm',
       'mailpit',
       'traefik',
     ]);
-    expect(Object.keys(everywhere.services).sort()).toEqual(['alloy', 'docker-proxy', 'traefik']);
+    expect(Object.keys(everywhere.services).sort()).toEqual([
+      'alloy',
+      'docker-proxy',
+      'kafka',
+      'kafka-setup',
+      'traefik',
+    ]);
     expect(Object.keys(production.services).sort()).toEqual([
       'alloy',
       'cloudflared',
       'docker-proxy',
+      'kafka',
+      'kafka-setup',
       'traefik',
     ]);
   });
@@ -123,6 +133,14 @@ describe.each(boxed)('%s', (name, service) => {
         expect.objectContaining({ host_ip: '127.0.0.1', published: '80', target: 8080 }),
         expect.objectContaining({ host_ip: '::1', published: '80', target: 8080 }),
       ]);
+    });
+  } else if (name === 'kafka') {
+    it('publishes only the listener for an app that runs outside a container, on this laptop itself', () => {
+      expect(service.ports).toEqual([
+        expect.objectContaining({ host_ip: '127.0.0.1', published: '9094', target: 9094 }),
+        expect.objectContaining({ host_ip: '::1', published: '9094', target: 9094 }),
+      ]);
+      expect(everywhere.services.kafka?.ports).toBeUndefined();
     });
   } else if (name === 'alloy') {
     it('publishes only its OTLP port for HTTP, on this laptop itself, for an app that runs outside a container', () => {
@@ -321,6 +339,137 @@ describe('the telemetry agent', () => {
       'source_labels = ["__meta_docker_container_label_com_docker_compose_service"]'
     );
     expect(config).toContain('target_label  = "service_name"');
+  });
+});
+
+describe('the Kafka broker', () => {
+  const broker = everywhere.services.kafka;
+  const settings = broker?.environment ?? {};
+
+  it('signs every client in with SCRAM-SHA-512, and lets a user do only what a rule allows, as records 0039 and 0041 of toolkit say', () => {
+    expect(settings.KAFKA_SASL_ENABLED_MECHANISMS).toBe('SCRAM-SHA-512');
+    expect(settings.KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL).toBe('SCRAM-SHA-512');
+    expect(settings.KAFKA_AUTHORIZER_CLASS_NAME).toBe(
+      'org.apache.kafka.metadata.authorizer.StandardAuthorizer'
+    );
+    expect(settings.KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND).toBe('false');
+    expect(settings.KAFKA_SUPER_USERS).toBe('User:admin;User:setup;User:ANONYMOUS');
+  });
+
+  it('keeps its controller port inside its own container, because the controller signs in as the unnamed user', () => {
+    expect(settings.KAFKA_LISTENERS).toBe('SASL_PLAINTEXT://:9092,CONTROLLER://localhost:9093');
+    expect(settings.KAFKA_CONTROLLER_QUORUM_VOTERS).toBe('1@localhost:9093');
+    expect(settings.KAFKA_LISTENER_SECURITY_PROTOCOL_MAP).toBe(
+      'CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT'
+    );
+  });
+
+  it('is one node that is broker and controller at once, and never makes a topic on its first use', () => {
+    expect(settings.KAFKA_PROCESS_ROLES).toBe('broker,controller');
+    expect(settings.KAFKA_AUTO_CREATE_TOPICS_ENABLE).toBe('false');
+    expect(settings.KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR).toBe('1');
+  });
+
+  it('formats its storage once, with the users admin and setup, before the image starts it', () => {
+    const script = broker?.command?.join(' ') ?? '';
+    expect(script).toContain('kafka-storage.sh format --ignore-formatted');
+    expect(script).toContain(
+      '--add-scram "SCRAM-SHA-512=[name=admin,password=$${KAFKA_ADMIN_PASSWORD}]"'
+    );
+    expect(script).toContain(
+      '--add-scram "SCRAM-SHA-512=[name=setup,password=$${KAFKA_SETUP_PASSWORD}]"'
+    );
+    expect(script).toContain('exec /etc/kafka/docker/run');
+  });
+
+  it('keeps its data in a volume, and its heap well inside its memory limit', () => {
+    expect(broker?.volumes).toEqual([
+      expect.objectContaining({
+        type: 'volume',
+        source: 'kafka-data',
+        target: '/var/lib/kafka/data',
+      }),
+    ]);
+    expect(settings.KAFKA_HEAP_OPTS).toBe('-Xms512m -Xmx512m');
+    expect(Number(broker?.mem_limit)).toBe(1024 * 1024 * 1024);
+  });
+
+  it('writes only to its data, its generated settings and /tmp, and runs without JMX', () => {
+    expect(broker?.tmpfs).toEqual([
+      '/tmp',
+      '/opt/kafka/config:uid=1000,gid=1000',
+      '/opt/kafka/logs:uid=1000,gid=1000',
+    ]);
+    expect(settings.KAFKA_JMX_OPTS).toBe(' ');
+  });
+
+  it('takes throwaway passwords on the laptop, and the secrets of the host in production', () => {
+    expect(laptop.services.kafka?.environment).toEqual(
+      expect.objectContaining({
+        KAFKA_ADMIN_PASSWORD: 'local-only-admin',
+        KAFKA_SETUP_PASSWORD: 'local-only-setup',
+      })
+    );
+    expect(productionText).toContain('KAFKA_ADMIN_PASSWORD: ${KAFKA_ADMIN_PASSWORD}');
+    expect(productionText).toContain('KAFKA_SETUP_PASSWORD: ${KAFKA_SETUP_PASSWORD}');
+  });
+
+  it('gives an app outside a container a listener of its own on the laptop, and has none in production', () => {
+    const local = laptop.services.kafka?.environment ?? {};
+    expect(local.KAFKA_ADVERTISED_LISTENERS).toBe(
+      'SASL_PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094'
+    );
+    expect(local.KAFKA_LISTENER_SECURITY_PROTOCOL_MAP).toContain('EXTERNAL:SASL_PLAINTEXT');
+    expect(production.services.kafka?.environment?.KAFKA_ADVERTISED_LISTENERS).toBe(
+      'SASL_PLAINTEXT://kafka:9092'
+    );
+  });
+});
+
+describe("the job that sets up Kafka's topics, users and rules", () => {
+  const job = everywhere.services['kafka-setup'];
+  const script = job?.command?.join(' ') ?? '';
+
+  it('runs once, after the broker is healthy, as a job that the deploy runs on the host', () => {
+    expect(job?.labels).toEqual({ 'com.zigordev.job': 'migrate' });
+    expect(job?.restart).toBe('no');
+    expect(job?.depends_on?.kafka?.condition).toBe('service_healthy');
+    expect(job?.healthcheck).toBeUndefined();
+  });
+
+  it('waits for the command on the laptop, outside the wait for health checks', () => {
+    expect(laptop.services['kafka-setup']).toBeUndefined();
+    expect(withSetup.services['kafka-setup']?.profiles).toEqual(['setup']);
+  });
+
+  it('is boxed in like a service, on the image of the broker', () => {
+    expect(job?.image).toBe(everywhere.services.kafka?.image);
+    expect(job?.user).toBe('1000:1000');
+    expect(job?.init).toBe(true);
+    expect(job?.read_only).toBe(true);
+    expect(job?.cap_drop).toEqual(['ALL']);
+    expect(job?.security_opt).toEqual(['no-new-privileges:true']);
+    expect(Number(job?.mem_limit)).toBeGreaterThan(0);
+    expect(job?.cpus).toBeGreaterThan(0);
+    expect(job?.ports).toBeUndefined();
+  });
+
+  it('signs in as the user setup, and gives each user the password named after it', () => {
+    expect(script).toContain('username=\\"setup\\" password=\\"$${KAFKA_SETUP_PASSWORD}\\"');
+    expect(script).toContain('KAFKA_PASSWORD_');
+    expect(script).toContain('is not set, so the user');
+  });
+
+  it('only adds topics, users and rules, so a run never deletes data', () => {
+    expect(script).toContain('--create --if-not-exists');
+    expect(script).not.toContain('--delete');
+    expect(script).not.toContain('--remove');
+  });
+
+  it('takes the password of the user setup from the secrets of the host in production', () => {
+    expect(productionText).toMatch(
+      /kafka-setup:\n\s+environment:\n\s+KAFKA_SETUP_PASSWORD: \$\{KAFKA_SETUP_PASSWORD\}/
+    );
   });
 });
 

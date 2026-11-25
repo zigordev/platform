@@ -259,6 +259,151 @@ services:
         condition: service_healthy
     networks: [zigordev, docker]
 
+  kafka:
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f
+    command:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        export KAFKA_LISTENER_NAME_SASL__PLAINTEXT_SCRAM___SHA___512_SASL_JAAS_CONFIG="org.apache.kafka.common.security.scram.ScramLoginModule required username=\"admin\" password=\"$${KAFKA_ADMIN_PASSWORD}\";"
+        printf '%s\n' \
+          "process.roles=$${KAFKA_PROCESS_ROLES}" \
+          "node.id=$${KAFKA_NODE_ID}" \
+          "controller.quorum.voters=$${KAFKA_CONTROLLER_QUORUM_VOTERS}" \
+          "controller.listener.names=$${KAFKA_CONTROLLER_LISTENER_NAMES}" \
+          "listeners=$${KAFKA_LISTENERS}" \
+          "advertised.listeners=$${KAFKA_ADVERTISED_LISTENERS}" \
+          "listener.security.protocol.map=$${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}" \
+          "inter.broker.listener.name=$${KAFKA_INTER_BROKER_LISTENER_NAME}" \
+          "sasl.enabled.mechanisms=$${KAFKA_SASL_ENABLED_MECHANISMS}" \
+          "sasl.mechanism.inter.broker.protocol=$${KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL}" \
+          "log.dirs=$${KAFKA_LOG_DIRS}" > /tmp/format.properties
+        KAFKA_LOG4J_OPTS=-Dlog4j2.configurationFile=/etc/kafka/docker/tools-log4j2.yaml \
+          /opt/kafka/bin/kafka-storage.sh format --ignore-formatted -t "$${CLUSTER_ID}" -c /tmp/format.properties \
+          --add-scram "SCRAM-SHA-512=[name=admin,password=$${KAFKA_ADMIN_PASSWORD}]" \
+          --add-scram "SCRAM-SHA-512=[name=setup,password=$${KAFKA_SETUP_PASSWORD}]"
+        rm /tmp/format.properties
+        exec /etc/kafka/docker/run
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 30s
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      CLUSTER_ID: zxDw5kpHRNCfbBLbNLddOw
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: SASL_PLAINTEXT://:9092,CONTROLLER://localhost:9093
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: SASL_PLAINTEXT
+      KAFKA_SASL_ENABLED_MECHANISMS: SCRAM-SHA-512
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: SCRAM-SHA-512
+      KAFKA_OPTS: -Djava.security.auth.login.config=/dev/null
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_SUPER_USERS: User:admin;User:setup;User:ANONYMOUS
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+      KAFKA_JMX_OPTS: " "
+    tmpfs:
+      - /tmp
+      - /opt/kafka/config:uid=1000,gid=1000
+      - /opt/kafka/logs:uid=1000,gid=1000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: [CMD, bash, -c, "exec 3<>/dev/tcp/127.0.0.1/9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 60s
+      start_interval: 2s
+    networks: [zigordev]
+
+  kafka-setup:
+    image: apache/kafka:4.4.0@sha256:833b867a9585a141da455dc2b57431c65cbccb27f11c91f694444cca9f777e0f
+    command:
+      - bash
+      - -c
+      - |
+        set -euo pipefail
+        bin=/opt/kafka/bin
+        server=kafka:9092
+        printf '%s\n' "security.protocol=SASL_PLAINTEXT" "sasl.mechanism=SCRAM-SHA-512" \
+          "sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username=\"setup\" password=\"$${KAFKA_SETUP_PASSWORD}\";" \
+          > /tmp/setup.properties
+        sign_in=(--bootstrap-server "$$server" --command-config /tmp/setup.properties)
+        "$$bin/kafka-topics.sh" "$${sign_in[@]}" --list > /dev/null
+        while read -r verb first second third fourth fifth; do
+          case "$$verb" in
+            '') ;;
+            topic)
+              "$$bin/kafka-topics.sh" "$${sign_in[@]}" --create --if-not-exists --topic "$$first" \
+                --partitions "$$second" --replication-factor 1 > /dev/null
+              echo "kafka-setup: topic $$first"
+              ;;
+            user)
+              variable="KAFKA_PASSWORD_$$(printf '%s' "$$first" | tr 'a-z-' 'A-Z_')"
+              password="$${!variable:-}"
+              if [ -z "$$password" ]; then
+                echo "kafka-setup: $$variable is not set, so the user $$first cannot sign in" >&2
+                exit 1
+              fi
+              "$$bin/kafka-configs.sh" "$${sign_in[@]}" --alter --entity-type users --entity-name "$$first" \
+                --add-config "SCRAM-SHA-512=[password=$$password]" > /dev/null
+              echo "kafka-setup: user $$first"
+              ;;
+            allow)
+              pattern=literal
+              if [ "$${fifth:-}" = prefixed ]; then
+                pattern=prefixed
+              fi
+              "$$bin/kafka-acls.sh" "$${sign_in[@]}" --add --allow-principal "User:$$first" \
+                --operation "$$second" "--$$third" "$$fourth" --resource-pattern-type "$$pattern" > /dev/null
+              echo "kafka-setup: $$first may $$second $$third $$fourth ($$pattern)"
+              ;;
+            *)
+              echo "kafka-setup: unknown line: $$verb $$first" >&2
+              exit 1
+              ;;
+          esac
+        done <<< "$${KAFKA_SETUP:-}"
+        echo "kafka-setup: done"
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
+      KAFKA_SETUP: ""
+    tmpfs:
+      - /tmp
+      - /opt/kafka/logs:uid=1000,gid=1000
+    labels:
+      com.zigordev.job: migrate
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [zigordev]
+
 networks:
   zigordev:
     name: zigordev
@@ -268,3 +413,4 @@ networks:
 
 volumes:
   alloy-data:
+  kafka-data:
