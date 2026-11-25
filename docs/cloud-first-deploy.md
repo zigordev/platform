@@ -481,6 +481,11 @@ The timer `platform-restore-test.timer` runs `platform-backup restore-test` on t
 
 Both jobs keep the time of their last success on the data disk, in `/srv/data/platform/backups`, so a rebuilt host remembers them. Both write it for the telemetry agent, in `/var/lib/platform/metrics/backup-dump.prom` and `backup-restore-test.prom`, as `platform_backup_last_success_timestamp_seconds` and `platform_restore_test_last_success_timestamp_seconds` for each `compose_project`. A store whose job never passed reports 0.
 
+Two alerts watch them, both by email, and the Platform dashboard's row "Backups" shows both ages:
+
+- [A backup is too old](runbooks/backup-is-too-old.md): a product's newest dump has been older than 2 hours for 5 minutes.
+- [A restore test is too old](runbooks/restore-test-is-too-old.md): a product's last good restore test is older than 35 days, or none ever passed.
+
 ### How to check the backups
 
 | Command                                                                                                                                                                                                 | What it shows                                                    |
