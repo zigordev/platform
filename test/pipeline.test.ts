@@ -198,13 +198,23 @@ describe('the push of dashboards and alerts to Grafana Cloud', () => {
     removeBy: string;
   };
 
-  it('decides on main only, from the switch and from what the merge changed', () => {
+  it('decides on main only, from the switch and from whether the files gcx pushes changed', () => {
     expect(decide).toContain("if: github.event_name == 'push'\n");
     expect(decide).toContain('enabled="$(jq -r .grafanaCloud observability/push.json)"\n');
+    expect(decide).toContain('pnpm --filter platform-observability run build > /dev/null &&\n');
+    expect(decide).toContain('build "$RUNNER_TEMP/after"\n');
     expect(decide).toContain(
-      'changed="$(git diff --name-only HEAD~1 HEAD -- observability infra/grafana)"\n'
+      'if git checkout --quiet HEAD~1 && build "$RUNNER_TEMP/before"; then\n'
     );
+    expect(decide).toContain(
+      'changed="$(diff -rq "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" || true)"\n'
+    );
+    expect(decide).not.toContain('git diff --name-only');
     expect(decide).toContain('    permissions:\n      contents: read\n    outputs:\n');
+  });
+
+  it('asks for a push when the files of the commit before cannot be built, so a doubt never skips one', () => {
+    expect(decide).toContain('changed="the files of the commit before could not be built"\n');
   });
 
   it('waits for the owner in the environment that the apply role trusts, after the gate and the apply', () => {
