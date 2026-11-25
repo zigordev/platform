@@ -1,13 +1,13 @@
 # Use platform
 
-`platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-23, because the platform is still being built.
+`platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-25, because the platform is still being built.
 
-| A user takes                         | Who       | From                 | Exists today                                           |
-| ------------------------------------ | --------- | -------------------- | ------------------------------------------------------ |
-| The shared services on the laptop    | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack` |
-| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop. Four of the ten alerts             |
-| A place to run in production         | A product | `infra/` and `host/` | Not yet. Phase 3                                       |
-| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those four                                    |
+| A user takes                         | Who       | From                 | Exists today                                                   |
+| ------------------------------------ | --------- | -------------------- | -------------------------------------------------------------- |
+| The shared services on the laptop    | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack`         |
+| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop and in Grafana Cloud. Six of the ten alerts |
+| A place to run in production         | A product | `infra/` and `host/` | Yes, the host of phase 3                                       |
+| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those six                                             |
 
 ## What a product does not have to do
 
