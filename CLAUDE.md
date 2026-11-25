@@ -58,6 +58,7 @@ The infrastructure and the shared services of every zigordev product: the ingres
 - `pnpm exec zigordev sync` copies the shared files from `@zigordev/dev` into this repo.
 - `pnpm exec zigordev release plan` says which public packages npm lacks at the latest tagged version. It changes nothing.
 - `pnpm lint:infra` checks the OpenTofu code's format and runs tflint. `pnpm test:infra` runs the stacks' tests. Both need no AWS account, and `pnpm check` runs them.
+- `pnpm test:infra` and `infra/run.sh` keep each provider version once, in `~/.cache/opentofu/plugins` or the folder that `TF_PLUGIN_CACHE_DIR` names, and link it into each stack's `.terraform`. OpenTofu never deletes an old version from it, so delete the old versions by hand.
 - `pnpm local:up` builds, starts the shared services, waits until each is healthy, and pushes the dashboards and alert rules. `pnpm local:down` stops them and keeps their data. `pnpm local:reset` deletes the data too.
 
 ## Rules of this repo

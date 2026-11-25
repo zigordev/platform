@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +23,9 @@ command="$2"
 var="FAKE_$(echo "$stack" | tr 'a-z-' 'A-Z_')"
 case "$command" in
   init)
+    if [ -n "\${FAKE_CACHE_LOG:-}" ]; then
+      echo "\${TF_PLUGIN_CACHE_DIR:-}" >> "$FAKE_CACHE_LOG"
+    fi
     initvar="\${var}_INIT"
     exit "\${!initvar:-0}"
     ;;
@@ -99,6 +110,27 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(work, { recursive: true, force: true });
+});
+
+describe('infra/run.sh and the provider cache', () => {
+  it('keeps each provider once, in a cache in the home folder that it makes', () => {
+    const home = join(work, 'home');
+    const log = join(work, 'cache.log');
+    const result = run('plan', { HOME: home, FAKE_CACHE_LOG: log });
+    const cache = join(home, '.cache', 'opentofu', 'plugins');
+    expect(result.code).toBe(0);
+    expect(existsSync(cache)).toBe(true);
+    expect(readFileSync(log, 'utf8')).toBe(`${cache}\n${cache}\n`);
+  });
+
+  it('uses the cache that TF_PLUGIN_CACHE_DIR names, when it names one', () => {
+    const cache = join(work, 'shared-cache');
+    const log = join(work, 'cache.log');
+    const result = run('plan', { TF_PLUGIN_CACHE_DIR: cache, FAKE_CACHE_LOG: log });
+    expect(result.code).toBe(0);
+    expect(existsSync(cache)).toBe(true);
+    expect(readFileSync(log, 'utf8')).toBe(`${cache}\n${cache}\n`);
+  });
 });
 
 describe('infra/run.sh plan', () => {
