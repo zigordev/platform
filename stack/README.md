@@ -176,7 +176,9 @@ On the laptop the job also needs `KAFKA_PASSWORD_NOTES_API`, a throwaway passwor
 
 `KAFKA_SETUP` holds one user today, `notifications-api`, the notifications service. It reads every app's requests and writes every app's answers, through three prefixed rules that never change when an app joins. On the laptop its password is `local-only-notifications-api`.
 
-On the laptop the job reads a second list after `KAFKA_SETUP`: `KAFKA_SETUP_LAPTOP`, in `compose.local.yaml`, for users that only a laptop needs. Production never sets it. It holds one user today, `template-api`, the product template's API, which sends its emails through the notifications service and never deploys. Its throwaway password is `local-only-template-api`.
+`KAFKA_SETUP` also holds the four topics of every app that sends email, the template's too, and the service's right to set a bad request aside on each app's requests' dead-letter topic. The notifications service reads the requests topic of every app in its producer list, which ships in its image, wherever it runs. One missing topic stops it reading any, so every producer's topics exist on every broker.
+
+On the laptop the job reads a second list after `KAFKA_SETUP`: `KAFKA_SETUP_LAPTOP`, in `compose.local.yaml`, for users that only a laptop needs. Production never sets it. It holds one user today, `template-api`, the product template's API, which sends its emails through the notifications service and never deploys. Its topics are in `KAFKA_SETUP`, so in production nobody can write to them. Its throwaway password is `local-only-template-api`.
 
 The broker formats its own storage before the image starts it, and makes the users `admin` and `setup` there, because image 4.4.0 ignores the setting that would do that. [Record 0027](../docs/adr/0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) says why.
 
