@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fake="$FAKE_DIR"
+printf 'aws %s\n' "$*" >> "$fake/calls"
+if [ -e "$fake/aws-fails" ]; then
+  echo "An error occurred (AccessDenied)" >&2
+  exit 1
+fi
+bucket="$fake/bucket"
+
+if [ "$1 $2" = "s3 cp" ]; then
+  shift 2
+  recursive=no
+  paths=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --recursive)
+        recursive=yes
+        shift
+        ;;
+      --only-show-errors) shift ;;
+      --region) shift 2 ;;
+      *)
+        paths+=("$1")
+        shift
+        ;;
+    esac
+  done
+  if [ "$recursive" = yes ]; then
+    mkdir -p "${paths[1]}"
+    cp "$bucket/${paths[0]#s3://*/}"* "${paths[1]}"
+  else
+    key="${paths[1]#s3://*/}"
+    mkdir -p "$bucket/$(dirname "$key")"
+    cp "${paths[0]}" "$bucket/$key"
+  fi
+elif [ "$1 $2" = "s3api list-objects-v2" ]; then
+  prefix=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = --prefix ]; then
+      prefix="$2"
+    fi
+    shift
+  done
+  keys="$(cd "$bucket" 2> /dev/null && find . -type f | sed 's|^\./||' | grep "^$prefix" | sort | tr '\n' '\t' || true)"
+  printf '%s\n' "${keys:-None}"
+fi

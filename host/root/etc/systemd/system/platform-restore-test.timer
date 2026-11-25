@@ -1,0 +1,10 @@
+[Unit]
+Description=Tests the restore of every product's newest dump on the 1st of each month, and an hour after each boot
+
+[Timer]
+OnCalendar=*-*-01 04:00:00 UTC
+OnBootSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -38,7 +38,7 @@ install -m 0755 "$plugins/docker-rollout.download" "$plugins/docker-rollout"
 rm -f "$plugins/docker-rollout.download"
 
 systemctl enable --now docker.service
-systemctl enable --now platform-docker-cleanup.timer platform-container-memory.timer
+systemctl enable --now platform-docker-cleanup.timer platform-container-memory.timer platform-backup.timer platform-restore-test.timer
 mkdir -p /var/lib/platform
 date -u +%Y-%m-%dT%H:%M:%SZ > /var/lib/platform/setup-done
 systemctl enable --now platform-redeploy.service

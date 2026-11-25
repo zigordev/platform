@@ -4,14 +4,14 @@ Production is built in phase 3, and this page grows with it. Today it says what 
 
 ## What will leave this repo
 
-| What                                                 | How it will travel                                                                                                                                 | State on 2026-11-23                                                                        |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below                                                        | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
-| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval                                                         | Running since 2026-11-23: the bootstrap, the plan and the apply, and GitHub's settings     |
-| The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                                                                          | Written in step 3.4. It exists once the owner has approved its first apply                 |
-| The shared services on the host                      | Through the deploy path below: every merge to `main` runs the job "Deploy the shared services", which sends the command `platform-deploy-platform` | From step 3.7. The job deploys `stack/compose.yaml` with `stack/compose.production.yaml`   |
-| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana                                                      | Written in step 3.6, and switched on in step 3.7, on 2026-11-24, once the agent sent data  |
-| The backups                                          | The stack `infra/backups`: the bucket for the dumps, its key and lock, and the daily snapshot of the data disk                                     | Written in step 3.8 on 2026-11-25. It exists once the owner has approved its apply         |
+| What                                                 | How it will travel                                                                                                                                                        | State on 2026-11-23                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| The shared services for the laptop                   | Published to the public npm registry as the package `@zigordev/stack`, by the release below                                                                               | Published. The release runs after every merge, and a `feat` or a `fix` gives a new version |
+| Changes to AWS, Cloudflare, GitHub and Grafana Cloud | The pipeline shows the plan in the pull request, and applies it after the owner's approval                                                                                | Running since 2026-11-23: the bootstrap, the plan and the apply, and GitHub's settings     |
+| The host itself                                      | The stack `infra/host`, with the files under `host/root` as its user data                                                                                                 | Written in step 3.4. It exists once the owner has approved its first apply                 |
+| The shared services on the host                      | Through the deploy path below: every merge to `main` runs the job "Deploy the shared services", which sends the command `platform-deploy-platform`                        | From step 3.7. The job deploys `stack/compose.yaml` with `stack/compose.production.yaml`   |
+| The dashboards and the alert rules                   | The pipeline pushes the same files to Grafana Cloud that the laptop pushes to its own Grafana                                                                             | Written in step 3.6, and switched on in step 3.7, on 2026-11-24, once the agent sent data  |
+| The backups                                          | The stack `infra/backups`: the bucket for the dumps, its key and lock, and the daily snapshot of the data disk. The host dumps every hour and tests a restore every month | Written in step 3.8 on 2026-11-25. It exists once the owner has approved its apply         |
 
 ## The path of a change
 
@@ -461,15 +461,36 @@ Backups are step 3.8 of the build plan, in the stack `infra/backups`. Toolkit's 
 
 The host may add, read and list dumps, through the policy `backups` on its role. It may never delete a dump, change a lock or touch the bucket's settings. The bucket and its key are never destroyed by code.
 
-The host's hourly dump and the monthly restore test arrive in the next part of step 3.8. Until then the bucket stays empty.
+### The hourly dump
+
+The script `/usr/local/sbin/platform-backup` does both jobs on the host. The timer `platform-backup.timer` runs `platform-backup dump` at 17 minutes past every hour. Toolkit's [record 0035](https://github.com/zigordev/toolkit/blob/main/docs/adr/0035-labels-tell-the-platform-what-a-service-is.md) is the contract it relies on.
+
+1. It finds every running container that carries the label `com.zigordev.backup: postgres`, and names its dumps after the container's compose project.
+2. Inside the store, as the user `postgres` and with no password, it dumps the roles with `pg_dumpall --globals-only`.
+3. It dumps every database but `postgres`, which holds no app's data, with `pg_dump --format=custom`. Inside the same snapshot it counts every table's rows.
+4. It uploads the set to `s3://zigordev-platform-backups/<project>/<date>/<time>Z/`, and the file `complete` last. A set without `complete` was cut short, and the restore test passes it by.
+
+### The restore test
+
+The timer `platform-restore-test.timer` runs `platform-backup restore-test` on the 1st of every month at 04:00 UTC, and an hour after every boot. [Record 0026](adr/0026-the-monthly-restore-test-runs-on-the-host.md) says why it runs on the host.
+
+1. For each store, it downloads the newest complete set.
+2. It starts a throwaway container of the store's own image, named `zigordev-restore-<project>`, with no network and 256 MB of memory.
+3. It restores the roles, then every database, and compares each table's row count with the counts taken with the dump. Any difference fails the test.
+4. It removes the container, whatever the result.
+
+Both jobs keep the time of their last success on the data disk, in `/srv/data/platform/backups`, so a rebuilt host remembers them. Both write it for the telemetry agent, in `/var/lib/platform/metrics/backup-dump.prom` and `backup-restore-test.prom`, as `platform_backup_last_success_timestamp_seconds` and `platform_restore_test_last_success_timestamp_seconds` for each `compose_project`. A store whose job never passed reports 0.
 
 ### How to check the backups
 
-| Command                                                                                                                                                                                                 | What it shows                  |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `aws ec2 describe-snapshots --profile platform-ops --region eu-west-1 --owner-ids self --filters Name=tag:made-by,Values=data-lifecycle-manager --query 'Snapshots[].[StartTime,State]' --output table` | The snapshots of the data disk |
-| `aws s3api get-object-lock-configuration --profile platform-ops --region eu-west-1 --bucket zigordev-platform-backups`                                                                                  | The lock and its 30 days       |
-| `aws s3 ls --profile platform-ops --region eu-west-1 --recursive s3://zigordev-platform-backups/ \| tail`                                                                                               | The newest dumps               |
+| Command                                                                                                                                                                                                 | What it shows                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `aws ec2 describe-snapshots --profile platform-ops --region eu-west-1 --owner-ids self --filters Name=tag:made-by,Values=data-lifecycle-manager --query 'Snapshots[].[StartTime,State]' --output table` | The snapshots of the data disk                                   |
+| `aws s3api get-object-lock-configuration --profile platform-ops --region eu-west-1 --bucket zigordev-platform-backups`                                                                                  | The lock and its 30 days                                         |
+| `aws s3 ls --profile platform-ops --region eu-west-1 --recursive s3://zigordev-platform-backups/ \| tail`                                                                                               | The newest dumps                                                 |
+| `systemctl list-timers 'platform-*'`                                                                                                                                                                    | On the host: when each job runs next                             |
+| `sudo journalctl -u platform-backup.service -u platform-restore-test.service --since today`                                                                                                             | On the host: each run, and why one failed                        |
+| `cat /var/lib/platform/metrics/backup-*.prom`                                                                                                                                                           | On the host: the time of each store's last good dump and restore |
 
 ### What backups cost
 
