@@ -85,18 +85,21 @@ The agent reads the log lines of every container on the two networks, through th
 | ---------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Its own heartbeat, under the name `alloy`                        | Itself                                                         | One series. An alert fires when it has been missing for 10 minutes     |
 | The machine's processor, memory and disks, under the name `host` | Three read-only mounts of the machine: `/proc`, `/sys` and `/` | Only the series that a dashboard or an alert uses, and only real disks |
+| Whether the Kafka broker answers, under the name `kafka`         | A connection to `kafka:9092` once a minute, with no sign-in    | One series. An alert fires when it has failed for 5 minutes            |
 
 The three mounts let the agent read the machine's numbers. It runs as a user that is not root, so it reads only what every user of the machine may read. On the laptop "the machine" is the small Linux machine inside Docker Desktop.
 
+The check of the broker only opens a connection. Alloy's own Kafka exporter would sign in at the agent's start, and on 2026-11-25 it stopped the whole agent whenever Kafka was down then, so it is not used. How far behind a consumer is, and the messages it set aside, come from each app's own numbers instead, which `@zigordev/events` reports.
+
 ### Dashboards and alert rules
 
-`zigordev-stack up` ends by pushing nine files to the local Grafana, with gcx: one folder, two dashboards and six alert rules. A second push changes nothing.
+`zigordev-stack up` ends by pushing twelve files to the local Grafana, with gcx: one folder, two dashboards and nine alert rules. A second push changes nothing.
 
-| In Grafana                              | What it shows                                                                                                                                                   |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dashboards, folder `zigordev`, App      | One app, picked from a list: whether it reports, its version, its requests, the share that fail, its response times, its events and its errors                  |
-| Dashboards, folder `zigordev`, Platform | The machine's processor, memory and disks, the requests at the ingress, who is reporting, and how old each product's newest dump and last good restore test are |
-| Alerting, six rules                     | [The runbooks](../docs/runbooks/README.md) list them. On the laptop they show in Grafana and notify nobody                                                      |
+| In Grafana                              | What it shows                                                                                                                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboards, folder `zigordev`, App      | One app, picked from a list: whether it reports, its version, its requests, the share that fail, its response times, its events, its errors, and its messages waiting and set aside               |
+| Dashboards, folder `zigordev`, Platform | The machine's processor, memory and disks, the requests at the ingress, who is reporting, how old each product's newest dump and last good restore test are, and whether the Kafka broker answers |
+| Alerting, nine rules                    | [The runbooks](../docs/runbooks/README.md) list them. On the laptop they show in Grafana and notify nobody                                                                                        |
 
 A new app needs no entry anywhere. It appears in the list of the App dashboard with its first request, and every rule covers it.
 
@@ -264,7 +267,7 @@ Every product starts the same project, named `platform`. Two products that hold 
 | `pnpm local:up`                                                              | It prints "kafka-setup: done", and ends with "The shared services are up:" and the four addresses                                                |
 | `pnpm local:up` a second time                                                | The same, within seconds, and no service is recreated                                                                                            |
 | Open `http://grafana.localhost`, then Dashboards, then the folder `zigordev` | The dashboards App and Platform are there, and Platform shows the machine's numbers                                                              |
-| In Grafana, open Alerting, then Alert rules                                  | Six rules are listed in the folder `zigordev`, each one "Normal"                                                                                 |
+| In Grafana, open Alerting, then Alert rules                                  | Nine rules are listed in the folder `zigordev`, each one "Normal"                                                                                |
 | Open `http://grafana.localhost` and `http://mail.localhost`                  | Both pages open, with no sign-in                                                                                                                 |
 | In Grafana's Explore, pick Loki and run `{service_name="traefik"}`           | Traefik's own log lines show                                                                                                                     |
 | Open `http://nothing.localhost`                                              | Traefik answers 404, because no container asked for that address                                                                                 |

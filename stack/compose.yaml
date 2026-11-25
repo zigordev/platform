@@ -200,10 +200,21 @@ services:
           }
         }
 
+        prometheus.exporter.blackbox "kafka" {
+          config = "{ modules: { tcp: { prober: tcp, timeout: 5s } } }"
+
+          target {
+            name    = "kafka"
+            address = "kafka:9092"
+            module  = "tcp"
+          }
+        }
+
         prometheus.scrape "machine" {
           targets = array.concat(
             prometheus.exporter.self.alloy.targets,
             prometheus.exporter.unix.host.targets,
+            prometheus.exporter.blackbox.kafka.targets,
           )
           scrape_interval = "60s"
           forward_to      = [prometheus.relabel.machine.receiver]
@@ -214,7 +225,7 @@ services:
 
           rule {
             source_labels = ["__name__", "mode", "fstype"]
-            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;"
+            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;|probe_success;;"
             action        = "keep"
           }
 
@@ -230,6 +241,13 @@ services:
             regex         = "integrations/unix"
             target_label  = "job"
             replacement   = "host"
+          }
+
+          rule {
+            source_labels = ["job"]
+            regex         = "integrations/blackbox/kafka"
+            target_label  = "job"
+            replacement   = "kafka"
           }
         }
 

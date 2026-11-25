@@ -41,7 +41,7 @@ One dependency is our own. `@zigordev/dev` holds the developer setup that every 
 | `http://traefik.localhost` | The routes the ingress knows                                           |
 | `http://alloy.localhost`   | What the telemetry agent receives, and whether each part is healthy    |
 
-In Grafana, the folder `zigordev` under Dashboards holds two dashboards: App, for one app picked from a list, and Platform, for the machine and the ingress. Under Alerting there are six rules, which on a laptop notify nobody.
+In Grafana, the folder `zigordev` under Dashboards holds two dashboards: App, for one app picked from a list, and Platform, for the machine and the ingress. Under Alerting there are nine rules, which on a laptop notify nobody.
 
 A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself. For an app that runs as a process outside a container, the telemetry agent also listens on port 4318, and the Kafka broker on port 9094. None of these ports is reachable from the network the laptop is on.
 
