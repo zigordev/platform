@@ -282,11 +282,26 @@ describe('the telemetry agent', () => {
     expect(everywhere.services.alloy?.volumes).toEqual(laptop.services.alloy?.volumes);
   });
 
-  it('keeps only the machine series that a dashboard or an alert uses', () => {
+  it("keeps only the machine series that a dashboard or an alert uses, the backups' results among them", () => {
     expect(config).toContain(
-      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;"'
+      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;"'
     );
     expect(config).toContain('action        = "keep"');
+  });
+
+  it("lets the four results of the host's backup script through, and no other series of theirs", () => {
+    const pattern = /regex {9}= "(alloy_build_info[^"]+)"/.exec(config)?.[1] ?? '';
+    const kept = (series: string) => new RegExp(`^(?:${pattern})$`).test(series);
+    for (const name of [
+      'platform_backup_last_success_timestamp_seconds',
+      'platform_backup_size_bytes',
+      'platform_restore_test_last_success_timestamp_seconds',
+      'platform_restore_test_tables',
+    ]) {
+      expect(kept(`${name};;`), name).toBe(true);
+    }
+    expect(kept('platform_backup_duration_seconds;;')).toBe(false);
+    expect(kept('container_memory_working_set_bytes;;')).toBe(true);
   });
 
   it('reports its own heartbeat as alloy, and the machine as host', () => {

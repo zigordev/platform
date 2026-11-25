@@ -214,7 +214,7 @@ services:
 
           rule {
             source_labels = ["__name__", "mode", "fstype"]
-            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;"
+            regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;"
             action        = "keep"
           }
 
