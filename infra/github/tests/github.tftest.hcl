@@ -8,6 +8,10 @@ mock_provider "aws" {
 
 mock_provider "github" {}
 
+variables {
+  adopt_existing = false
+}
+
 run "every_repo_merges_by_squash_only_and_cleans_up_its_branches" {
   command = plan
 
