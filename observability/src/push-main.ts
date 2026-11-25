@@ -6,7 +6,7 @@ const image = gcxImage(
   readFileSync(new URL('../../stack/compose.local.yaml', import.meta.url), 'utf8')
 );
 
-process.exitCode = run(
+process.exitCode = await run(
   process.argv.slice(2),
   process.env,
   {
