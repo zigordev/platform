@@ -15,7 +15,7 @@ function alert(uid: string) {
 }
 
 describe('the alerts', () => {
-  it('are six, each with a name of its own', () => {
+  it('are nine, each with a name of its own', () => {
     expect(alerts.map((one) => one.uid)).toEqual([
       'app-answers-with-errors',
       'app-is-slow',
@@ -23,6 +23,9 @@ describe('the alerts', () => {
       'backup-is-too-old',
       'restore-test-is-too-old',
       'telemetry-went-silent',
+      'kafka-broker-is-down',
+      'messages-are-stuck',
+      'message-reached-dead-letter-topic',
     ]);
     expect(new Set(alerts.map((one) => one.title)).size).toBe(alerts.length);
   });
@@ -130,5 +133,50 @@ describe('telemetry that went silent', () => {
   it('means the agent sent no heartbeat for 10 minutes, and fires at once', () => {
     expect(one.expr).toBe('absent_over_time(alloy_build_info[10m])');
     expect(one.for).toBe('0s');
+  });
+});
+
+describe('a Kafka broker that is down', () => {
+  const one = alert('kafka-broker-is-down');
+
+  it("means the agent's check of the broker's port has failed for 5 minutes", () => {
+    expect(one.expr).toBe('(max(probe_success{job="kafka"})) < 1');
+    expect(one.for).toBe('5m');
+  });
+
+  it('reads a check that needs no sign-in, so the broker needs no user for the agent', () => {
+    expect(one.expr).not.toContain('kafka_');
+  });
+});
+
+describe('messages that are stuck', () => {
+  const one = alert('messages-are-stuck');
+
+  it("means a consumer group has had messages waiting and has handled none for 10 minutes, then 5 more, by the app's own numbers", () => {
+    expect(one.expr).toContain(
+      'max by (service_name, messaging_destination_name, messaging_consumer_group_name) (zigordev_events_consumer_lag) > 0'
+    );
+    expect(one.expr).toContain(
+      'unless on (service_name, messaging_destination_name, messaging_consumer_group_name)'
+    );
+    expect(one.expr).toContain('increase(messaging_client_consumed_messages_total[10m])');
+    expect(one.for).toBe('5m');
+  });
+
+  it('names the app and the topic', () => {
+    expect(one.summary).toContain('{{ $labels.service_name }}');
+    expect(one.summary).toContain('{{ $labels.messaging_destination_name }}');
+  });
+});
+
+describe('a message that reached a dead-letter topic', () => {
+  const one = alert('message-reached-dead-letter-topic');
+
+  it('fires at once for every message an app set aside, with the reason', () => {
+    expect(one.expr).toBe(
+      'sum by (service_name, messaging_destination_name, zigordev_events_reason) (increase(zigordev_events_dead_letters_total[10m])) > 0'
+    );
+    expect(one.for).toBe('0s');
+    expect(one.summary).toContain('{{ $labels.zigordev_events_reason }}');
   });
 });

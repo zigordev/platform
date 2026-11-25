@@ -1,9 +1,16 @@
-import { appPanels, lastRestoreTestAge, newestDumpAge, platformPanels } from './dashboards.ts';
+import {
+  appPanels,
+  brokerAnswers,
+  lastRestoreTestAge,
+  newestDumpAge,
+  platformPanels,
+} from './dashboards.ts';
 import type { Alert } from './resources.ts';
 
 const apps = 'service_name!="traefik"';
 const requests = 'http_server_request_duration_seconds_count';
 const buckets = 'http_server_request_duration_seconds_bucket';
+const consumer = 'service_name, messaging_destination_name, messaging_consumer_group_name';
 
 export const slowestAllowed = 1;
 export const oldestDumpAllowed = 2 * 60 * 60;
@@ -85,5 +92,44 @@ export const alerts: readonly Alert[] = [
     runbook: 'telemetry-went-silent.md',
     dashboard: 'platform',
     panel: platformPanels.agent,
+  },
+  {
+    uid: 'kafka-broker-is-down',
+    title: 'The Kafka broker is down',
+    summary:
+      'The Kafka broker has not answered on its port for 5 minutes, so no app can send or read events',
+    expr: `(${brokerAnswers}) < 1`,
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'phone',
+    runbook: 'kafka-broker-is-down.md',
+    dashboard: 'platform',
+    panel: platformPanels.brokerAnswers,
+  },
+  {
+    uid: 'messages-are-stuck',
+    title: 'Messages are stuck',
+    summary:
+      '{{ $labels.service_name }} has had messages waiting on {{ $labels.messaging_destination_name }} for 15 minutes, and has handled none of them',
+    expr: `(max by (${consumer}) (zigordev_events_consumer_lag) > 0) unless on (${consumer}) (sum by (${consumer}) (increase(messaging_client_consumed_messages_total[10m])) > 0)`,
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'phone',
+    runbook: 'messages-are-stuck.md',
+    dashboard: 'app',
+    panel: appPanels.waiting,
+  },
+  {
+    uid: 'message-reached-dead-letter-topic',
+    title: 'A message reached a dead-letter topic',
+    summary:
+      '{{ $labels.service_name }} set a message from {{ $labels.messaging_destination_name }} aside on its dead-letter topic, with the reason {{ $labels.zigordev_events_reason }}',
+    expr: 'sum by (service_name, messaging_destination_name, zigordev_events_reason) (increase(zigordev_events_dead_letters_total[10m])) > 0',
+    lookBack: '10m',
+    for: '0s',
+    reaches: 'email',
+    runbook: 'message-reached-dead-letter-topic.md',
+    dashboard: 'app',
+    panel: appPanels.setAside,
   },
 ];

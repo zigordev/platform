@@ -2,13 +2,13 @@
 
 `platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-25, because the platform is still being built.
 
-| A user takes                             | Who       | From                 | Exists today                                                   |
-| ---------------------------------------- | --------- | -------------------- | -------------------------------------------------------------- |
-| The shared services on the laptop        | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack`         |
-| A dashboard, and the standard alerts     | A product | `observability/`     | Yes, on the laptop and in Grafana Cloud. Six of the ten alerts |
-| A place to run in production             | A product | `infra/` and `host/` | Yes, the host of phase 3                                       |
-| A Kafka broker, with a user for each app | A product | `stack/`             | Yes                                                            |
-| A runbook for every alert                | The owner | `docs/runbooks/`     | Yes, for those six                                             |
+| A user takes                             | Who       | From                 | Exists today                                                         |
+| ---------------------------------------- | --------- | -------------------- | -------------------------------------------------------------------- |
+| The shared services on the laptop        | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack`               |
+| A dashboard, and the standard alerts     | A product | `observability/`     | Yes, on the laptop and in Grafana Cloud. Nine of the thirteen alerts |
+| A place to run in production             | A product | `infra/` and `host/` | Yes, the host of phase 3                                             |
+| A Kafka broker, with a user for each app | A product | `stack/`             | Yes                                                                  |
+| A runbook for every alert                | The owner | `docs/runbooks/`     | Yes, for those nine                                                  |
 
 ## What a product does not have to do
 
@@ -22,7 +22,7 @@ Everything else comes from here, with no line of setup in the product:
 | Its logs, traces and metrics in Grafana | One agent collects them from every container the same way                     | Yes                                             |
 | A place that catches its email          | The mail catcher takes whatever is sent to it on the laptop                   | Yes                                             |
 | Its dashboard                           | The dashboard asks the data which apps exist                                  | Yes                                             |
-| The standard alerts                     | Each rule covers every app at once                                            | Six of ten                                      |
+| The standard alerts                     | Each rule covers every app at once                                            | Nine of thirteen                                |
 | Its backups                             | The backup job finds a database by a label in the product's compose file      | Yes, every hour, and a restore test every month |
 
 ## Being served on the laptop
@@ -64,7 +64,9 @@ An app that sends its requests' numbers the standard way, which `@zigordev/otel`
 | The alert "An app answers with errors" | Grafana, Alerting                                                 | More than 5% of its requests fail at the server for 5 minutes       |
 | The alert "An app is slow"             | Grafana, Alerting                                                 | Its slowest 5% of requests take longer than 1 second for 10 minutes |
 
-The Platform dashboard shows the machine, the ingress and who is reporting. Two more alerts watch the platform itself: the host filling up, and telemetry going silent.
+An app that sends and reads events through `@zigordev/events` gets two more, from the numbers that package reports, with no setup either: "Messages are stuck", when it has had messages waiting for 15 minutes and handled none, and "A message reached a dead-letter topic", when it set a message aside. The row Messages of the App dashboard shows both.
+
+The Platform dashboard shows the machine, the ingress, who is reporting, the backups and the Kafka broker. Five more alerts watch the platform itself: the host filling up, telemetry going silent, a backup or a restore test that is too old, and the Kafka broker not answering.
 
 Each alert links [its runbook](runbooks/README.md), and opens the panel that shows the problem. On the laptop the rules run and notify nobody.
 

@@ -11,6 +11,9 @@ const expected = [
   'alert-app-is-slow.json',
   'alert-backup-is-too-old.json',
   'alert-host-is-filling-up.json',
+  'alert-kafka-broker-is-down.json',
+  'alert-message-reached-dead-letter-topic.json',
+  'alert-messages-are-stuck.json',
   'alert-restore-test-is-too-old.json',
   'alert-telemetry-went-silent.json',
   'dashboard-app.json',
@@ -33,7 +36,7 @@ afterEach(() => {
 });
 
 describe('the files that gcx pushes', () => {
-  it('are one folder, two dashboards and six alert rules', () => {
+  it('are one folder, two dashboards and nine alert rules', () => {
     expect(Object.keys(manifests()).sort()).toEqual(expected);
   });
 
@@ -92,7 +95,7 @@ describe('the build script', () => {
     const target = join(scratch(), 'out');
     expect(attempt([target])).toEqual({
       code: 0,
-      out: `observability: wrote 9 files to ${target}\n`,
+      out: `observability: wrote 12 files to ${target}\n`,
       err: '',
     });
     expect(readdirSync(target).sort()).toEqual(expected);
@@ -106,7 +109,7 @@ describe('the build script', () => {
     const script = fileURLToPath(new URL('./main.ts', import.meta.url));
     const target = join(scratch(), 'from-script');
     const output = execFileSync(process.execPath, [script, target], { encoding: 'utf8' });
-    expect(output).toBe(`observability: wrote 9 files to ${target}\n`);
+    expect(output).toBe(`observability: wrote 12 files to ${target}\n`);
     expect(readdirSync(target).sort()).toEqual(expected);
   });
 });

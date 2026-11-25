@@ -22,6 +22,8 @@ export const appPanels = {
   linesByLevel: 10,
   events: 11,
   problems: 12,
+  waiting: 13,
+  setAside: 14,
 } as const;
 
 export const platformPanels = {
@@ -38,12 +40,14 @@ export const platformPanels = {
   linesByService: 11,
   dumpAge: 12,
   restoreTestAge: 13,
+  brokerAnswers: 14,
 } as const;
 
 export const newestDumpAge =
   'time() - max by (compose_project) (platform_backup_last_success_timestamp_seconds)';
 export const lastRestoreTestAge =
   'time() - max by (compose_project) (platform_restore_test_last_success_timestamp_seconds)';
+export const brokerAnswers = 'max(probe_success{job="kafka"})';
 
 const one = 'service_name="$app"';
 const requests = `http_server_request_duration_seconds_count{${one}`;
@@ -142,6 +146,23 @@ export function appRows(): Row[] {
         ),
       ],
     },
+    {
+      title: 'Messages',
+      panels: [
+        overTime(appPanels.waiting, 'Messages waiting, by topic', 'short', [
+          {
+            expr: `max by (messaging_destination_name, messaging_consumer_group_name) (zigordev_events_consumer_lag{${one}})`,
+            legend: '{{messaging_destination_name}}',
+          },
+        ]),
+        overTime(appPanels.setAside, 'Messages set aside, by topic', 'short', [
+          {
+            expr: `sum by (messaging_destination_name, zigordev_events_reason) (increase(zigordev_events_dead_letters_total{${one}}[$__rate_interval]))`,
+            legend: '{{messaging_destination_name}}, {{zigordev_events_reason}}',
+          },
+        ]),
+      ],
+    },
   ];
 }
 
@@ -233,6 +254,14 @@ export function platformRows(): Row[] {
           's',
           [{ expr: lastRestoreTestAge, legend: '{{compose_project}}' }]
         ),
+      ],
+    },
+    {
+      title: 'Kafka',
+      panels: [
+        overTime(platformPanels.brokerAnswers, 'The broker answers on its port', 'short', [
+          { expr: brokerAnswers, legend: 'kafka' },
+        ]),
       ],
     },
   ];

@@ -302,7 +302,7 @@ describe('the telemetry agent', () => {
 
   it("keeps only the machine series that a dashboard or an alert uses, the backups' results among them", () => {
     expect(config).toContain(
-      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;"'
+      'regex         = "alloy_build_info;;|node_cpu_seconds_total;idle;|node_memory_(MemTotal|MemAvailable)_bytes;;|node_filesystem_(size|avail)_bytes;;(ext4|xfs)|container_(memory_working_set|spec_memory_limit)_bytes;;|platform_backup_(last_success_timestamp_seconds|size_bytes);;|platform_restore_test_(last_success_timestamp_seconds|tables);;|probe_success;;"'
     );
     expect(config).toContain('action        = "keep"');
   });
@@ -325,6 +325,17 @@ describe('the telemetry agent', () => {
   it('reports its own heartbeat as alloy, and the machine as host', () => {
     expect(config).toContain('replacement   = "alloy"');
     expect(config).toContain('replacement   = "host"');
+  });
+
+  it("checks that the Kafka broker answers on its port, and reports it as kafka, without signing in, so a broker that is down never stops the agent's start", () => {
+    expect(config).toContain('prometheus.exporter.blackbox "kafka" {');
+    expect(config).toContain('config = "{ modules: { tcp: { prober: tcp, timeout: 5s } } }"');
+    expect(config).toContain('address = "kafka:9092"');
+    expect(config).toContain('prometheus.exporter.blackbox.kafka.targets,');
+    expect(config).toContain('regex         = "integrations/blackbox/kafka"');
+    expect(config).toContain('replacement   = "kafka"');
+    expect(config).not.toContain('prometheus.exporter.kafka');
+    expect(config).not.toContain('sasl');
   });
 
   it('lifts the trace id out of a log line, so that the line links to its trace and the trace to its lines', () => {

@@ -77,6 +77,9 @@ describe.each([
       'device',
       'service',
       'compose_project',
+      'messaging_destination_name',
+      'messaging_consumer_group_name',
+      'zigordev_events_reason',
     ];
     for (const query of queries(model)) {
       for (const label of grouped(query)) {
@@ -105,8 +108,8 @@ describe('the app dashboard', () => {
     }
   });
 
-  it('shows what the plan asks for: whether it is up, its version, requests, failures, response times, events and errors', () => {
-    expect(rows(app)).toEqual(['Now', 'Requests', 'Response times', 'Logs and events']);
+  it('shows what the plan asks for: whether it is up, its version, requests, failures, response times, events, errors and messages', () => {
+    expect(rows(app)).toEqual(['Now', 'Requests', 'Response times', 'Logs and events', 'Messages']);
     expect(panels(app).map((panel) => panel.title)).toEqual([
       'Copies reporting',
       'Version',
@@ -120,7 +123,18 @@ describe('the app dashboard', () => {
       'Log lines by level',
       'Events',
       'Errors and warnings',
+      'Messages waiting, by topic',
+      'Messages set aside, by topic',
     ]);
+  });
+
+  it("shows the app's waiting and set-aside messages from the numbers @zigordev/events reports", () => {
+    expect(question(app, appPanels.waiting)).toBe(
+      'max by (messaging_destination_name, messaging_consumer_group_name) (zigordev_events_consumer_lag{service_name="$app"})'
+    );
+    expect(question(app, appPanels.setAside)).toBe(
+      'sum by (messaging_destination_name, zigordev_events_reason) (increase(zigordev_events_dead_letters_total{service_name="$app"}[$__rate_interval]))'
+    );
   });
 
   it('counts a request as failed when the server is at fault, not the visitor', () => {
@@ -139,8 +153,14 @@ describe('the platform dashboard', () => {
     expect(platform.templating?.list ?? []).toEqual([]);
   });
 
-  it('shows the machine, the ingress, the telemetry itself and the backups', () => {
-    expect(rows(platform)).toEqual(['The machine', 'The ingress', 'Telemetry', 'Backups']);
+  it('shows the machine, the ingress, the telemetry itself, the backups and the broker', () => {
+    expect(rows(platform)).toEqual(['The machine', 'The ingress', 'Telemetry', 'Backups', 'Kafka']);
+  });
+
+  it("shows whether the broker answers, from the agent's check of its port", () => {
+    expect(question(platform, platformPanels.brokerAnswers)).toBe(
+      'max(probe_success{job="kafka"})'
+    );
   });
 
   it("shows how old each product's newest dump and last good restore test are", () => {
