@@ -253,12 +253,12 @@ So the host costs $33.15 a month. As a t4g.small it cost $6.29 a month during th
 
 ### What it holds
 
-| Part                       | What it is                                                                                                                                                                                                                                      |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The tunnel `platform-host` | A connection that the host opens to Cloudflare, so visitors reach the host with no port open. Cloudflare holds its configuration: one route sends every `*.zigordev.com` name to Traefik at `http://traefik:8080`, and anything else gets a 404 |
-| One record per product     | `<product>.zigordev.com`, a proxied CNAME to the tunnel, made from the product list `infra/products.json`. It holds `playground`, the test app of step 3.9                                                                                      |
-| The mail records           | SPF `v=spf1 -all` names no sender, and DMARC `p=reject; sp=reject` asks every receiver to reject mail that claims the domain. They change when SES sends, in phase 5                                                                            |
-| The HTTPS settings         | Always Use HTTPS, automatic HTTPS rewrites, and TLS 1.2 at least                                                                                                                                                                                |
+| Part                       | What it is                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The tunnel `platform-host` | A connection that the host opens to Cloudflare, so visitors reach the host with no port open. Cloudflare holds its configuration: one route sends every `*.zigordev.com` name to Traefik at `http://traefik:8080`, and anything else gets a 404         |
+| One record per product     | `<product>.zigordev.com`, a proxied CNAME to the tunnel, made from the product list `infra/products.json`. It holds `playground`, the test app of step 3.9                                                                                              |
+| The mail records           | SPF `v=spf1 -all` names no sender, and DMARC `p=reject; sp=reject; adkim=s; aspf=s` asks every receiver to reject mail that claims the domain unless its DKIM or SPF domain is exactly `zigordev.com`. They stay so once SES sends: see [Email](#email) |
+| The HTTPS settings         | Always Use HTTPS, automatic HTTPS rewrites, and TLS 1.2 at least                                                                                                                                                                                        |
 
 ### The two tokens
 
@@ -295,6 +295,36 @@ Once the owner has said yes to a product, its address is one entry in `infra/pro
 ### What Cloudflare costs
 
 Nothing. The free plan holds the DNS, the proxy with its certificate, the tunnel and these settings. Cloudflare's docs list tunnels as "Available on all plans".
+
+## Email
+
+The notifications service sends every product's mail through AWS SES in eu-west-1. This repo holds SES's side in the stack `infra/email`, from step 5.4 of the build plan. [Record 0029](adr/0029-ses-sends-as-the-domain-with-easy-dkim-and-dmarc-passes-on-dkim-alone.md) says why it is shaped this way.
+
+### What the email stack holds
+
+| Part                               | What it is                                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The domain identity `zigordev.com` | Once it is verified, SES may send from any address at `zigordev.com`. SES makes a 2048-bit key for it, Easy DKIM, keeps the private half, and signs every message as `zigordev.com`       |
+| Three DKIM records                 | `<token>._domainkey.zigordev.com` in Cloudflare, each a CNAME to `<token>.dkim.amazonses.com` that Cloudflare does not proxy. SES gives the three tokens, and finds the records by itself |
+
+Every From address is at `zigordev.com` itself, such as `no-reply@zigordev.com`, never at a subdomain, because DMARC asks for strict alignment. SES sends with its own envelope domain, so SPF of the apex stays `v=spf1 -all`, and DMARC passes on DKIM.
+
+### After the first apply
+
+1. SES checks the DNS by itself. AWS's page allows up to 72 hours for DNS changes to propagate; Cloudflare's usually answer within minutes.
+2. On the laptop, this shows the state:
+
+   ```bash
+   aws sesv2 get-email-identity --profile platform-ops --region eu-west-1 --email-identity zigordev.com --query '{verified: VerifiedForSendingStatus, dkim: DkimAttributes.Status, zone: DkimAttributes.SigningHostedZone}'
+   ```
+
+   It shows `"verified": true`, `"dkim": "SUCCESS"` and `"zone": "dkim.amazonses.com"`. If the zone differs, `local.dkim.zone` in `infra/email/locals.tf` takes AWS's value, in a pull request.
+
+3. The owner asks AWS again for production access, in the Support Center, on the case AWS opened on 2026-11-25. A session never files or answers it. Until AWS agrees, SES sends only to addresses verified in it: its sandbox.
+
+### What SES costs
+
+The pricing page names no charge for an identity or for DKIM. Each message costs money. AWS's page says new SES accounts start on the Essentials plan since 2026-07-21: $0.16 per 1,000 messages, with no monthly fee. A la carte it is $0.10 per 1,000. Attachments add $0.12 per GB. SES has no free allowance of its own; new AWS accounts get up to $200 of credits. Checked on AWS's pricing page on 2026-11-25.
 
 ## Grafana Cloud
 
@@ -562,6 +592,7 @@ They were set by hand when the repo was created, on 2026-11-22, as a copy of the
 | The repair gave up after 3 restarts                            | The association's history shows it: Systems Manager, then State Manager, then `platform-host-repair-first-boot`, then Execution history. In a shell, `cloud-init status --long` and `/var/log/cloud-init.log` say why the first boot found no setup. Once the cause is fixed in code, the rebuild starts the count again                                                                                                                                                                                            |
 | The plan of `cloudflare` fails to sign in                      | Cloudflare refuses the token, most often with "Invalid access token". The owner makes a new account API token with the four permissions under "The two tokens", and stores it with the same command                                                                                                                                                                                                                                                                                                                 |
 | The Cloudflare token nears its end date                        | The token made on 2026-11-24 works until 2027-11-22. Before that day, the owner makes a new one with the same four permissions, or moves the end date on the token's page, and stores a new value with the same command. A token works only between its start and end dates: on 2026-11-24 Cloudflare refused one whose start date lay a year ahead, with "Invalid access token"                                                                                                                                    |
+| SES does not verify `zigordev.com`                             | The command under "After the first apply" in [Email](#email) shows the DKIM status. After a day of `PENDING`, or at `FAILED`, list the tokens with `--query DkimAttributes.Tokens` and check each record with `dig +short CNAME <token>._domainkey.zigordev.com`, which must answer `<token>.dkim.amazonses.com`. When `SigningHostedZone` is another zone, `local.dkim.zone` in `infra/email/locals.tf` takes it, in a pull request                                                                                |
 | A Grafana token leaked, or has to change                       | Raise `local.rotation` in `infra/grafana-cloud/locals.tf` through a pull request. The apply replaces all four tokens and stores the new ones under the same names. The host takes the new agent token at its next deploy                                                                                                                                                                                                                                                                                            |
 | The plan of `grafana-cloud` fails to sign in                   | Grafana refuses the owner's token, `/platform/GRAFANA_CLOUD_TOKEN`. The owner makes a new one with the same five scopes in Grafana's pages, under Access policies, and stores it with the same command as the Cloudflare token                                                                                                                                                                                                                                                                                      |
 | A product goes live                                            | Set `"live": true` for it in `infra/products.json`, once its `/health` answers over https. The plan shows its new outside check                                                                                                                                                                                                                                                                                                                                                                                     |

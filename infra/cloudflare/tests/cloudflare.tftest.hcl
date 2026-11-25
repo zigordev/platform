@@ -75,12 +75,12 @@ run "the_tunnel_sends_every_product_name_to_traefik_and_nothing_else" {
   }
 }
 
-run "no_server_may_send_mail_as_the_domain" {
+run "no_server_may_use_the_domain_as_its_envelope_sender" {
   command = plan
 
   assert {
     condition     = cloudflare_dns_record.spf.name == "zigordev.com" && cloudflare_dns_record.spf.type == "TXT" && cloudflare_dns_record.spf.content == "\"v=spf1 -all\""
-    error_message = "SPF names no sender at all."
+    error_message = "SPF names no sender at all: SES sends with its own envelope domain, and DMARC passes on DKIM."
   }
 
   assert {
