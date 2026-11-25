@@ -398,7 +398,7 @@ services:
               exit 1
               ;;
           esac
-        done <<< "$${KAFKA_SETUP:-}"
+        done <<< "$$(printf '%s\n%s\n' "$${KAFKA_SETUP:-}" "$${KAFKA_SETUP_LAPTOP:-}")"
         echo "kafka-setup: done"
     user: "1000:1000"
     init: true

@@ -482,6 +482,39 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
       /kafka-setup:\n\s+environment:\n\s+KAFKA_SETUP_PASSWORD: \$\{KAFKA_SETUP_PASSWORD\}/
     );
   });
+
+  it('reads the list that runs everywhere, then the one only the laptop has', () => {
+    expect(script).toContain(
+      `done <<< "$$(printf '%s\\n%s\\n' "$\${KAFKA_SETUP:-}" "$\${KAFKA_SETUP_LAPTOP:-}")"`
+    );
+    expect(job?.environment?.KAFKA_SETUP_LAPTOP).toBeUndefined();
+    expect(productionText).not.toContain('KAFKA_SETUP_LAPTOP');
+  });
+
+  it("gives the laptop the notifications service's user and the template's, with their topics, rules and throwaway passwords", () => {
+    const settings = withSetup.services['kafka-setup']?.environment ?? {};
+    const lines = String(settings.KAFKA_SETUP_LAPTOP ?? '')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines).toEqual([
+      'user notifications-api',
+      'allow notifications-api Read topic notifications.requests. prefixed',
+      'allow notifications-api Write topic notifications.outcomes. prefixed',
+      'allow notifications-api Read group notifications-api. prefixed',
+      'user template-api',
+      'topic notifications.requests.template-api 1',
+      'topic notifications.requests.template-api.dead-letter 1',
+      'topic notifications.outcomes.template-api 1',
+      'topic notifications.outcomes.template-api.dead-letter 1',
+      'allow template-api Write topic notifications.requests.template-api',
+      'allow template-api Read topic notifications.outcomes.template-api',
+      'allow template-api Write topic notifications.outcomes.template-api.dead-letter',
+      'allow template-api Read group template-api. prefixed',
+      'allow notifications-api Write topic notifications.requests.template-api.dead-letter',
+    ]);
+    expect(settings.KAFKA_PASSWORD_NOTIFICATIONS_API).toBe('local-only-notifications-api');
+    expect(settings.KAFKA_PASSWORD_TEMPLATE_API).toBe('local-only-template-api');
+  });
 });
 
 describe('the job that pushes the dashboards and the alert rules', () => {
