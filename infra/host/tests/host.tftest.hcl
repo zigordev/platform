@@ -18,12 +18,12 @@ mock_provider "aws" {
   }
 }
 
-run "the_host_is_a_t4g_small_whose_cpu_credits_are_capped" {
+run "the_host_is_a_t4g_medium_whose_cpu_credits_are_capped" {
   command = plan
 
   assert {
-    condition     = aws_instance.host.instance_type == "t4g.small"
-    error_message = "The host is a t4g.small."
+    condition     = aws_instance.host.instance_type == "t4g.medium"
+    error_message = "The host is a t4g.medium, as toolkit's record 0043 says once the broker arrives."
   }
 
   assert {

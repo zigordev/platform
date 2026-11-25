@@ -16,7 +16,7 @@ locals {
 
   host = {
     name          = "platform-host"
-    instance_type = "t4g.small"
+    instance_type = "t4g.medium"
     system_gb     = 20
     image         = "/aws/service/canonical/ubuntu/server/26.04/stable/current/arm64/hvm/ebs-gp3/ami-id"
   }
