@@ -28,6 +28,10 @@ locals {
       description = "The test app of step 3.9: the whole product template, deployed from every merge to main"
       deploys     = true
     }
+    notifications = {
+      description = "The email service of every zigordev product, and its client package"
+      deploys     = false
+    }
   }
 
   required_check = {

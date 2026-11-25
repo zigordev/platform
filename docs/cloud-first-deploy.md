@@ -503,7 +503,7 @@ At AWS's prices of 2026-11-25 in Ireland, the key costs $1 a month. A dump costs
 
 ## The settings on GitHub
 
-They were set by hand when the repo was created, on 2026-11-22, as a copy of the settings of `toolkit`. Since step 3.3 of the build plan they are code in `infra/github`, for `toolkit` and `platform` alike, and a change reaches them like any other stack: a plan in the pull request, an apply after the owner's approval. The table names the few that stay outside that stack.
+They were set by hand when the repo was created, on 2026-11-22, as a copy of the settings of `toolkit`. Since step 3.3 of the build plan they are code in `infra/github`, for every repo in its `local.repos` alike: `toolkit`, `platform`, `playground` since 2026-11-24 and `notifications` since 2026-11-25. A change reaches them like any other stack: a plan in the pull request, an apply after the owner's approval. The table names the few that stay outside that stack.
 
 | Setting                                | Value                                                                                                                 | Why                                                                                                          |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
