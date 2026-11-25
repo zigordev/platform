@@ -11,6 +11,8 @@ case "$mode" in
 esac
 
 root="${INFRA_ROOT:-$(cd "$(dirname "$0")" && pwd)}"
+export TF_PLUGIN_CACHE_DIR="${TF_PLUGIN_CACHE_DIR:-$HOME/.cache/opentofu/plugins}"
+mkdir -p "$TF_PLUGIN_CACHE_DIR"
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 outputs="${GITHUB_OUTPUT:-/dev/null}"
 laptop_only="bootstrap"
