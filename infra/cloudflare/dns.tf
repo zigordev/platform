@@ -16,7 +16,7 @@ resource "cloudflare_dns_record" "spf" {
   type    = "TXT"
   content = "\"${local.mail.spf}\""
   ttl     = 1
-  comment = "No server may send mail as this domain until SES does"
+  comment = "No server sends mail with this domain as its envelope sender: SES uses its own"
 }
 
 resource "cloudflare_dns_record" "dmarc" {
@@ -25,5 +25,5 @@ resource "cloudflare_dns_record" "dmarc" {
   type    = "TXT"
   content = "\"${local.mail.dmarc}\""
   ttl     = 1
-  comment = "Receivers reject any mail that claims this domain and fails SPF or DKIM"
+  comment = "Receivers reject mail claiming this domain unless DKIM or SPF passes for exactly this domain"
 }

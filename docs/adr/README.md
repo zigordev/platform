@@ -38,3 +38,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0026](0026-the-monthly-restore-test-runs-on-the-host.md)                                        | The monthly restore test runs on the host                                          | 2026-11-25 | accepted |
 | [0027](0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) | The broker formats its own storage, and one list holds its topics, users and rules | 2026-11-25 | accepted |
 | [0028](0028-the-shared-services-read-each-apps-kafka-password-from-the-apps-own-parameter.md)    | The shared services read each app's Kafka password from the app's own parameter    | 2026-11-25 | accepted |
+| [0029](0029-ses-sends-as-the-domain-with-easy-dkim-and-dmarc-passes-on-dkim-alone.md)            | SES sends as the domain with Easy DKIM, and DMARC passes on DKIM alone             | 2026-11-25 | proposed |
