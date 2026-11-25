@@ -411,7 +411,11 @@ services:
     cpus: 0.5
     environment:
       KAFKA_HEAP_OPTS: -Xms128m -Xmx256m
-      KAFKA_SETUP: ""
+      KAFKA_SETUP: |
+        user notifications-api
+        allow notifications-api Read topic notifications.requests. prefixed
+        allow notifications-api Write topic notifications.outcomes. prefixed
+        allow notifications-api Read group notifications-api. prefixed
     tmpfs:
       - /tmp
       - /opt/kafka/logs:uid=1000,gid=1000

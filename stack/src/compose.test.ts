@@ -13,6 +13,7 @@ const productionSecrets = readFileSync(
   new URL('../.env.production.example', import.meta.url),
   'utf8'
 );
+const secretLines = productionSecrets.split('\n').filter((line) => line.length > 0);
 
 const services: [string, Service][] = Object.entries(laptop.services);
 const connector = production.services.cloudflared;
@@ -491,9 +492,8 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
     expect(productionText).not.toContain('KAFKA_SETUP_LAPTOP');
   });
 
-  it("gives the laptop the notifications service's user and the template's, with their topics, rules and throwaway passwords", () => {
-    const settings = withSetup.services['kafka-setup']?.environment ?? {};
-    const lines = String(settings.KAFKA_SETUP_LAPTOP ?? '')
+  it("gives every broker the notifications service's user, with the three rules that never change when an app joins", () => {
+    const lines = String(job?.environment?.KAFKA_SETUP ?? '')
       .split('\n')
       .filter((line) => line !== '');
     expect(lines).toEqual([
@@ -501,6 +501,28 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
       'allow notifications-api Read topic notifications.requests. prefixed',
       'allow notifications-api Write topic notifications.outcomes. prefixed',
       'allow notifications-api Read group notifications-api. prefixed',
+    ]);
+  });
+
+  it("reads the notifications service's password in production from the service's own parameter, so it lives once", () => {
+    expect(productionText).toContain(
+      'KAFKA_PASSWORD_NOTIFICATIONS_API: ${KAFKA_PASSWORD_NOTIFICATIONS_API}'
+    );
+    expect(secretLines).toContain('KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD');
+  });
+
+  it("names in .env.production.example only secrets, each empty or one product's Kafka password", () => {
+    for (const line of secretLines) {
+      expect(line, line).toMatch(/^[A-Z][A-Z0-9_]*=(\/[a-z0-9][a-z0-9-]*\/KAFKA_PASSWORD)?$/);
+    }
+  });
+
+  it("gives the laptop the template's user, with its topics, rules and throwaway passwords", () => {
+    const settings = withSetup.services['kafka-setup']?.environment ?? {};
+    const lines = String(settings.KAFKA_SETUP_LAPTOP ?? '')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines).toEqual([
       'user template-api',
       'topic notifications.requests.template-api 1',
       'topic notifications.requests.template-api.dead-letter 1',
@@ -627,10 +649,7 @@ describe('what only production has', () => {
       [...productionText.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)].map((match) => match[1])
     );
     used.delete('DOCKER_SOCKET_GROUP');
-    const named = productionSecrets
-      .split('\n')
-      .filter((line) => line.length > 0)
-      .map((line) => line.replace(/=$/, ''));
+    const named = secretLines.map((line) => line.split('=')[0] ?? '');
     expect([...used].sort()).toEqual([...named].sort());
   });
 

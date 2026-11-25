@@ -66,7 +66,7 @@ function commit(name: string, folder: string, secrets: readonly string[], branch
   writeFileSync(join(base, 'compose.production.yaml'), 'services: {}\n');
   writeFileSync(
     join(base, '.env.production.example'),
-    secrets.map((item) => `${item}=\n`).join('')
+    secrets.map((item) => (item.includes('=') ? `${item}\n` : `${item}=\n`)).join('')
   );
   git(clone, 'add', '--all');
   git(clone, 'commit', '--quiet', '--message', `revision ${revision}`);
@@ -358,6 +358,90 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     );
     expect(acts()).toEqual([]);
     expect(existsSync(recordFile())).toBe(false);
+  });
+
+  it("lets the shared services read a product's Kafka password from that product's own parameter, so it lives once", () => {
+    repo('platform');
+    const shared = commit('platform', 'stack', [
+      'CLOUDFLARE_TUNNEL_TOKEN',
+      'KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD',
+    ]);
+    configure(shared, {
+      name: 'platform',
+      services: { traefik: { image: `traefik:v3.7.19@${digest('e')}` } },
+    });
+    parameter('/platform/CLOUDFLARE_TUNNEL_TOKEN', 'tunnel-token-value');
+    parameter('/notifications/KAFKA_PASSWORD', 'kafka-password-value');
+    const result = runWith(
+      { FAKE_SECRET_NAME: 'KAFKA_PASSWORD_NOTIFICATIONS_API' },
+      ...['--target', 'platform', '--repo', 'platform', '--dir', 'stack'],
+      ...['--action', 'deploy', '--commit', shared, '--images', '']
+    );
+    expect(result.code).toBe(0);
+    expect(result.last).toBe(
+      `platform-deploy: result=deployed target=platform commit=${shared} previous=none`
+    );
+    const seen = readFileSync(join(work, 'fake', 'secrets-seen'), 'utf8');
+    expect(seen).toContain('config-render kafka-password-value');
+    const asked = readFileSync(join(work, 'fake', 'aws-calls'), 'utf8');
+    expect(asked).toContain('/notifications/KAFKA_PASSWORD');
+    expect(asked).not.toContain('/platform/KAFKA_PASSWORD_NOTIFICATIONS_API');
+    expect(`${result.stdout}${result.stderr}`).not.toContain('kafka-password-value');
+  });
+
+  it("refuses a product that names another product's password, before anything changes", () => {
+    const first = commit('playground', '.', [
+      'PLAYGROUND_API_KEYS',
+      'BORROWED=/notifications/KAFKA_PASSWORD',
+    ]);
+    product(first);
+    const result = deploy(first);
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=bad-input target=playground commit=${first}`
+    );
+    expect(result.stdout).toContain('only the shared services may name');
+    expect(acts()).toEqual([]);
+  });
+
+  it("refuses the shared services a value that is not a product's Kafka password", () => {
+    repo('platform');
+    const shared = commit('platform', 'stack', ['GITHUB_KEY=/github-app/private-key']);
+    configure(shared, {
+      name: 'platform',
+      services: { traefik: { image: `traefik:v3.7.19@${digest('e')}` } },
+    });
+    const result = run(
+      ...['--target', 'platform', '--repo', 'platform', '--dir', 'stack'],
+      ...['--action', 'deploy', '--commit', shared, '--images', '']
+    );
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=bad-input target=platform commit=${shared}`
+    );
+    expect(acts()).toEqual([]);
+  });
+
+  it('names a missing borrowed password by the name it has in the shared services', () => {
+    repo('platform');
+    const shared = commit('platform', 'stack', [
+      'KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD',
+    ]);
+    configure(shared, {
+      name: 'platform',
+      services: { traefik: { image: `traefik:v3.7.19@${digest('e')}` } },
+    });
+    const result = run(
+      ...['--target', 'platform', '--repo', 'platform', '--dir', 'stack'],
+      ...['--action', 'deploy', '--commit', shared, '--images', '']
+    );
+    expect(result.code).toBe(2);
+    expect(result.last).toBe(
+      `platform-deploy: result=refused reason=missing-secrets target=platform commit=${shared}`
+    );
+    expect(result.stdout).toContain(
+      'These secrets are missing in Parameter Store: KAFKA_PASSWORD_NOTIFICATIONS_API'
+    );
   });
 
   it('renders the files once with the secrets, and runs nothing with a secret in its environment', () => {
