@@ -1,6 +1,6 @@
 # 0027. The broker formats its own storage, and one list holds its topics, users and rules
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-25
 - Supersedes: none
 

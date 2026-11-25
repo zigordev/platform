@@ -36,4 +36,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0024](0024-database-dumps-are-locked-for-30-days-and-nobody-can-lift-the-lock.md)               | Database dumps are locked for 30 days, and nobody can lift the lock                | 2026-11-25 | accepted |
 | [0025](0025-data-lifecycle-manager-snapshots-the-data-disk-every-day.md)                         | Data Lifecycle Manager snapshots the data disk every day                           | 2026-11-25 | accepted |
 | [0026](0026-the-monthly-restore-test-runs-on-the-host.md)                                        | The monthly restore test runs on the host                                          | 2026-11-25 | accepted |
-| [0027](0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) | The broker formats its own storage, and one list holds its topics, users and rules | 2026-11-25 | proposed |
+| [0027](0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) | The broker formats its own storage, and one list holds its topics, users and rules | 2026-11-25 | accepted |
