@@ -217,6 +217,12 @@ secret_names() {
   sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*$/\1/p' "$1/.env.production.example"
 }
 
+kafka_source='^/[a-z0-9][a-z0-9-]*/KAFKA_PASSWORD$'
+
+secret_source() {
+  sed -n "s|^$2=||p" "$1/.env.production.example" | head -n 1
+}
+
 release_compose() {
   local name="$1" folder="$2"
   shift 2
@@ -234,7 +240,7 @@ rendered_file() {
 }
 
 inspect_release() {
-  local name="$1" folder="$2" version="$3" list="$4" secret service image kind app
+  local name="$1" folder="$2" version="$3" list="$4" secret source service image kind app
   for secret in $(secret_names "$folder"); do
     case "$secret" in
       VERSION | DOCKER_SOCKET_GROUP | PATH | HOME | TMPDIR | AWS_*)
@@ -243,6 +249,12 @@ inspect_release() {
         return 2
         ;;
     esac
+    source="$(secret_source "$folder" "$secret")"
+    if [ -n "$source" ] && { [ "$name" != "$shared_target" ] || ! printf '%s\n' "$source" | grep -Eq "$kafka_source"; }; then
+      say "$secret names $source, and only the shared services may name a product's Kafka password, as /<product>/KAFKA_PASSWORD"
+      printf 'bad-input\n' > "$work/reason"
+      return 2
+    fi
   done
   if ! (
     export VERSION="$version" DOCKER_SOCKET_GROUP="$group"
@@ -293,13 +305,28 @@ fetch_secrets() {
   printf '%s' "$answer" | jq -r '.InvalidParameters[]' >> "$work/missing"
 }
 
+missing_names() {
+  local path
+  while read -r path; do
+    awk -F'|' -v want="$path" '$1 == want { print $2 }' "$work/sources"
+  done < "$work/missing"
+}
+
 load_secrets() {
-  local name="$1" folder="$2" secret batch="" count=0 full encoded
+  local name="$1" folder="$2" secret source batch="" count=0 encoded
   : > "$work/secrets"
   : > "$work/missing"
+  : > "$work/sources"
   for secret in $(secret_names "$folder"); do
-    batch="$batch /$name/$secret"
-    count=$((count + 1))
+    source="$(secret_source "$folder" "$secret")"
+    if [ -z "$source" ]; then
+      source="/$name/$secret"
+    fi
+    if ! cut -d'|' -f1 "$work/sources" | grep -qxF "$source"; then
+      batch="$batch $source"
+      count=$((count + 1))
+    fi
+    printf '%s|%s\n' "$source" "$secret" >> "$work/sources"
     if [ "$count" -eq 10 ]; then
       fetch_secrets $batch || return 1
       batch=""
@@ -311,12 +338,13 @@ load_secrets() {
   fi
   if [ -s "$work/missing" ]; then
     rm -f "$work/secrets"
-    say "These secrets are missing in Parameter Store: $(sed "s|^.*/||" "$work/missing" | tr '\n' ' ')"
+    say "These secrets are missing in Parameter Store: $(missing_names | tr '\n' ' ')"
     return 2
   fi
-  while IFS='|' read -r full encoded; do
-    export "${full##*/}=$(printf '%s' "$encoded" | base64 --decode)"
-  done < "$work/secrets"
+  while IFS='|' read -r source secret; do
+    encoded="$(awk -F'|' -v want="$source" '$1 == want { print $2; exit }' "$work/secrets")"
+    export "$secret=$(printf '%s' "$encoded" | base64 --decode)"
+  done < "$work/sources"
   rm -f "$work/secrets"
 }
 

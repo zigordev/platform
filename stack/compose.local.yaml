@@ -46,10 +46,6 @@ services:
     environment:
       KAFKA_SETUP_PASSWORD: local-only-setup
       KAFKA_SETUP_LAPTOP: |
-        user notifications-api
-        allow notifications-api Read topic notifications.requests. prefixed
-        allow notifications-api Write topic notifications.outcomes. prefixed
-        allow notifications-api Read group notifications-api. prefixed
         user template-api
         topic notifications.requests.template-api 1
         topic notifications.requests.template-api.dead-letter 1

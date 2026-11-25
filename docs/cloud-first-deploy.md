@@ -367,13 +367,13 @@ sequenceDiagram
 
 ### What each target gets
 
-| Part            | Name                        | What it does                                                                                                                                                                                       |
-| --------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The command     | `platform-deploy-<target>`  | Runs `/usr/local/sbin/platform-deploy` with the target, its repo and its compose folder fixed. The caller passes only the action, the commit and the images, each held to a pattern                |
-| The role        | `platform-deploy-<target>`  | Signs in from the environment `production` of the target's repo. It sends its own command to the host and reads the result, and can do nothing else                                                |
-| The environment | `production`                | In the target's repo. `infra/github` makes it, and only `main` may run in it                                                                                                                       |
-| The secrets     | `/<target>/<NAME>`          | One for each name in the target's `.env.production.example`, stored by the owner. The host's role reads only those. For the shared services that is six names in `/platform`, never the rest of it |
-| The record      | `/platform/deploy/<target>` | The version that runs, its verified images, and the version before. Only the host writes it. [Record 0020](adr/0020-the-host-records-each-deployed-version-in-parameter-store.md) says why         |
+| Part            | Name                        | What it does                                                                                                                                                                                                                                                                                                                       |
+| --------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The command     | `platform-deploy-<target>`  | Runs `/usr/local/sbin/platform-deploy` with the target, its repo and its compose folder fixed. The caller passes only the action, the commit and the images, each held to a pattern                                                                                                                                                |
+| The role        | `platform-deploy-<target>`  | Signs in from the environment `production` of the target's repo. It sends its own command to the host and reads the result, and can do nothing else                                                                                                                                                                                |
+| The environment | `production`                | In the target's repo. `infra/github` makes it, and only `main` may run in it                                                                                                                                                                                                                                                       |
+| The secrets     | `/<target>/<NAME>`          | One for each name in the target's `.env.production.example`, stored by the owner. The host's role reads only those. For the shared services that is eight names in `/platform`, never the rest of it, and each app's Kafka password at the app's own path, which a line names as `KAFKA_PASSWORD_<USER>=/<product>/KAFKA_PASSWORD` |
+| The record      | `/platform/deploy/<target>` | The version that runs, its verified images, and the version before. Only the host writes it. [Record 0020](adr/0020-the-host-records-each-deployed-version-in-parameter-store.md) says why                                                                                                                                         |
 
 ### What the host does
 
@@ -417,7 +417,13 @@ The broker needs two secrets, which the owner stores before its first deploy: `/
 aws ssm put-parameter --profile platform-ops --region eu-west-1 --type SecureString --name /platform/KAFKA_ADMIN_PASSWORD --value "$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)"
 ```
 
-An app's own Kafka user joins the list with its topics and rules, and its password is one more secret. Both users of the broker are made only when its storage is formatted, so changing one of these two passwords later takes `kafka-configs.sh --alter` on the broker as well.
+Both users of the broker are made only when its storage is formatted, so changing one of these two passwords later takes `kafka-configs.sh --alter` on the broker as well.
+
+An app's own Kafka user joins the list `KAFKA_SETUP` with its topics and rules. Its password lives once, at the app's own `/<product>/KAFKA_PASSWORD`, which the owner stores before the merge that adds the user. A line of `stack/.env.production.example` names it, such as `KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD`, so the deploy of the shared services reads that parameter and hands it to the job, and `infra/deploy` lets the host read exactly it. A deploy of the shared services sets the user's password again from that parameter, so a changed password reaches the broker that way. [Record 0028](adr/0028-the-shared-services-read-each-apps-kafka-password-from-the-apps-own-parameter.md) says why. For the notifications service:
+
+```bash
+aws ssm put-parameter --profile platform-ops --region eu-west-1 --type SecureString --name /notifications/KAFKA_PASSWORD --value "$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)"
+```
 
 They take no image of ours, so the command carries no images, and each outside image is pinned by its digest. A merge that changes nothing in `stack/` deploys them again too, and compose leaves every unchanged container as it is.
 

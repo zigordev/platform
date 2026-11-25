@@ -172,14 +172,11 @@ KAFKA_SETUP: |
   allow notes-api Read group notes-api. prefixed
 ```
 
-On the laptop the job also needs `KAFKA_PASSWORD_NOTES_API`, a throwaway password in `compose.local.yaml`. The app reaches the broker with three settings, which `@zigordev/events` reads: `KAFKA_BROKERS: kafka:9092`, `KAFKA_USERNAME: notes-api` and `KAFKA_PASSWORD`, the same password. In production an app's password lives once, at its own `/<product>/KAFKA_PASSWORD` in Parameter Store, as the owner chose on 2026-11-25.
+On the laptop the job also needs `KAFKA_PASSWORD_NOTES_API`, a throwaway password in `compose.local.yaml`. The app reaches the broker with three settings, which `@zigordev/events` reads: `KAFKA_BROKERS: kafka:9092`, `KAFKA_USERNAME: notes-api` and `KAFKA_PASSWORD`, the same password. In production an app's password lives once, at its own `/<product>/KAFKA_PASSWORD` in Parameter Store. A line of `.env.production.example` names it, such as `KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD`, and the host's deploy reads it from there. [Record 0028](../docs/adr/0028-the-shared-services-read-each-apps-kafka-password-from-the-apps-own-parameter.md) says why.
 
-On the laptop the job reads a second list after `KAFKA_SETUP`: `KAFKA_SETUP_LAPTOP`, in `compose.local.yaml`, for users that only a laptop needs. Production never sets it. It holds two users today, each with the throwaway password `local-only-<user>`:
+`KAFKA_SETUP` holds one user today, `notifications-api`, the notifications service. It reads every app's requests and writes every app's answers, through three prefixed rules that never change when an app joins. On the laptop its password is `local-only-notifications-api`.
 
-| User                | Why only on the laptop                                                                                                                 |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `notifications-api` | The notifications service reads every app's requests and writes every app's answers. It moves to `KAFKA_SETUP` before its first deploy |
-| `template-api`      | The product template's API, which sends its emails through the service. The template never deploys                                     |
+On the laptop the job reads a second list after `KAFKA_SETUP`: `KAFKA_SETUP_LAPTOP`, in `compose.local.yaml`, for users that only a laptop needs. Production never sets it. It holds one user today, `template-api`, the product template's API, which sends its emails through the notifications service and never deploys. Its throwaway password is `local-only-template-api`.
 
 The broker formats its own storage before the image starts it, and makes the users `admin` and `setup` there, because image 4.4.0 ignores the setting that would do that. [Record 0027](../docs/adr/0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) says why.
 

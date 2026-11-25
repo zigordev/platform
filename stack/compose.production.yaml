@@ -20,6 +20,7 @@ services:
   kafka-setup:
     environment:
       KAFKA_SETUP_PASSWORD: ${KAFKA_SETUP_PASSWORD}
+      KAFKA_PASSWORD_NOTIFICATIONS_API: ${KAFKA_PASSWORD_NOTIFICATIONS_API}
 
   cloudflared:
     image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
