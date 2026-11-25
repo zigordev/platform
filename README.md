@@ -30,7 +30,7 @@ It also draws one line that is easy to check. Only this repo can change AWS, Clo
 
 ## What it is built with
 
-The shared services are five containers. [stack/README.md](stack/README.md) explains each one.
+The shared services are six containers. [stack/README.md](stack/README.md) explains each one.
 
 | Tool                      | What it does here                                                                                                          |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -38,6 +38,7 @@ The shared services are five containers. [stack/README.md](stack/README.md) expl
 | Traefik 3                 | The ingress. It sends each address to its container, from the labels the container carries                                 |
 | socket-proxy              | The Docker proxy. It lets the ingress and the agent read which containers exist, and nothing else                          |
 | Grafana Alloy             | The telemetry agent. It receives traces and metrics, reads every container's log lines, and forwards all of it             |
+| Apache Kafka 4            | The broker for events between services. Every app signs in as a user of its own, and may do only what a rule allows        |
 | otel-lgtm                 | The local Grafana, with its stores for logs, traces and metrics in one container. It runs on the laptop only               |
 | Mailpit                   | The mail catcher. It receives every email an app sends on the laptop. It runs on the laptop only                           |
 | gcx                       | Grafana's command-line tool. It pushes the dashboards and the alert rules, as files, to the local Grafana                  |

@@ -2,12 +2,13 @@
 
 `platform` has two kinds of user. A product uses what this repo runs around it, and the owner operates it. This page says what each of them takes from it, and how. Each part says what exists on 2026-11-25, because the platform is still being built.
 
-| A user takes                         | Who       | From                 | Exists today                                                   |
-| ------------------------------------ | --------- | -------------------- | -------------------------------------------------------------- |
-| The shared services on the laptop    | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack`         |
-| A dashboard, and the standard alerts | A product | `observability/`     | Yes, on the laptop and in Grafana Cloud. Six of the ten alerts |
-| A place to run in production         | A product | `infra/` and `host/` | Yes, the host of phase 3                                       |
-| A runbook for every alert            | The owner | `docs/runbooks/`     | Yes, for those six                                             |
+| A user takes                             | Who       | From                 | Exists today                                                   |
+| ---------------------------------------- | --------- | -------------------- | -------------------------------------------------------------- |
+| The shared services on the laptop        | A product | `stack/`             | Yes, in this repo and as the package `@zigordev/stack`         |
+| A dashboard, and the standard alerts     | A product | `observability/`     | Yes, on the laptop and in Grafana Cloud. Six of the ten alerts |
+| A place to run in production             | A product | `infra/` and `host/` | Yes, the host of phase 3                                       |
+| A Kafka broker, with a user for each app | A product | `stack/`             | Yes                                                            |
+| A runbook for every alert                | The owner | `docs/runbooks/`     | Yes, for those six                                             |
 
 ## What a product does not have to do
 
@@ -40,6 +41,18 @@ Its log lines need nothing: the agent reads them from Docker and names them by t
 An app that runs as a process on the laptop, outside a container, as with `pnpm dev`, sends its traces and metrics to `http://127.0.0.1:4318` instead. The agent publishes that one port on the laptop itself, for HTTP only.
 
 [The package's own page](../stack/README.md) shows a whole example, explains each service, and lists what to check when an app is not served.
+
+## Sending and receiving events
+
+An app sends and reads events through `@zigordev/events`, which signs in to the shared Kafka broker as the app's own user. The app's topics, its user and what it may do are lines in the list `KAFKA_SETUP` in `stack/compose.yaml`. So they arrive through a pull request to this repo, and the job `kafka-setup` adds them on every laptop and on the host. [The package's own page](../stack/README.md#the-broker) shows the lines, with an example.
+
+| The app sets     | In a container on the laptop                                           | As a process on the laptop |
+| ---------------- | ---------------------------------------------------------------------- | -------------------------- |
+| `KAFKA_BROKERS`  | `kafka:9092`                                                           | `localhost:9094`           |
+| `KAFKA_USERNAME` | Its own user, as the list names it                                     | The same                   |
+| `KAFKA_PASSWORD` | The throwaway password that `stack/compose.local.yaml` gives that user | The same                   |
+
+Where an app's password lives in production is decided with the first app that needs one, the notifications service.
 
 ## The dashboard and the alerts
 

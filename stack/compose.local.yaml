@@ -29,6 +29,23 @@ services:
       traefik.http.routers.alloy.rule: Host(`alloy.localhost`)
       traefik.http.services.alloy.loadbalancer.server.port: "12345"
 
+  kafka:
+    ports:
+      - 127.0.0.1:9094:9094
+      - "[::1]:9094:9094"
+    environment:
+      KAFKA_LISTENERS: SASL_PLAINTEXT://:9092,CONTROLLER://localhost:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: SASL_PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT,EXTERNAL:SASL_PLAINTEXT
+      KAFKA_LISTENER_NAME_EXTERNAL_SCRAM___SHA___512_SASL_JAAS_CONFIG: org.apache.kafka.common.security.scram.ScramLoginModule required;
+      KAFKA_ADMIN_PASSWORD: local-only-admin
+      KAFKA_SETUP_PASSWORD: local-only-setup
+
+  kafka-setup:
+    profiles: [setup]
+    environment:
+      KAFKA_SETUP_PASSWORD: local-only-setup
+
   lgtm:
     image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
     init: true

@@ -400,14 +400,24 @@ The output stays short: a failed step shows only its last 40 lines. The containe
 
 ### The shared services
 
-The shared services are the target `platform`: `stack/compose.yaml` with `stack/compose.production.yaml`. On the host they are four containers:
+The shared services are the target `platform`: `stack/compose.yaml` with `stack/compose.production.yaml`. On the host they are five containers, and one job:
 
-| Container      | What it does in production                                                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `docker-proxy` | The filtered door to Docker, in the group that owns the socket on the host                                                         |
-| `traefik`      | The ingress. It sends each request to the app whose labels name the address                                                        |
-| `alloy`        | The telemetry agent. It sends the apps' traces, metrics and logs, the host's numbers and each container's memory to Grafana Cloud  |
-| `cloudflared`  | The connector of Cloudflare's tunnel. It opens the tunnel outward and hands each request to the ingress, so the host opens no port |
+| Container      | What it does in production                                                                                                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker-proxy` | The filtered door to Docker, in the group that owns the socket on the host                                                                                                                                                                                                 |
+| `traefik`      | The ingress. It sends each request to the app whose labels name the address                                                                                                                                                                                                |
+| `alloy`        | The telemetry agent. It sends the apps' traces, metrics and logs, the host's numbers and each container's memory to Grafana Cloud                                                                                                                                          |
+| `cloudflared`  | The connector of Cloudflare's tunnel. It opens the tunnel outward and hands each request to the ingress, so the host opens no port                                                                                                                                         |
+| `kafka`        | The Kafka broker, one node, with its data on the data disk. Every client signs in with SCRAM-SHA-512 and may do only what a rule allows. [Record 0027](adr/0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) says how it is set up |
+| `kafka-setup`  | A job, not a service: the deploy runs it after the broker is healthy. It adds the topics, users and rules of the list `KAFKA_SETUP`, and never deletes anything                                                                                                            |
+
+The broker needs two secrets, which the owner stores before its first deploy: `/platform/KAFKA_ADMIN_PASSWORD`, for the broker's own user, and `/platform/KAFKA_SETUP_PASSWORD`, for the job. Each is a long random value, stored as a SecureString, for example:
+
+```bash
+aws ssm put-parameter --profile platform-ops --region eu-west-1 --type SecureString --name /platform/KAFKA_ADMIN_PASSWORD --value "$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)"
+```
+
+An app's own Kafka user joins the list with its topics and rules, and its password is one more secret. Both users of the broker are made only when its storage is formatted, so changing one of these two passwords later takes `kafka-configs.sh --alter` on the broker as well.
 
 They take no image of ours, so the command carries no images, and each outside image is pinned by its digest. A merge that changes nothing in `stack/` deploys them again too, and compose leaves every unchanged container as it is.
 

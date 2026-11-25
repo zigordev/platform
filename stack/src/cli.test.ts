@@ -6,6 +6,7 @@ import { addresses, files, type Io, main, resources } from './cli.ts';
 const folder = fileURLToPath(new URL('../', import.meta.url));
 const both = '--file compose.yaml --file compose.local.yaml';
 const start = `docker compose ${both} up --detach --wait --wait-timeout 300`;
+const setup = `docker compose ${both} run --rm kafka-setup`;
 const push = `docker compose ${both} run --rm gcx`;
 
 interface Trial {
@@ -50,13 +51,13 @@ describe('zigordev-stack up', () => {
     const { io, ran, where } = trial();
     expect(main(['up'], io)).toBe(0);
     expect(ran[0]).toBe(start);
-    expect(where).toEqual(['/somewhere/stack', '/somewhere/stack']);
+    expect(where).toEqual(['/somewhere/stack', '/somewhere/stack', '/somewhere/stack']);
   });
 
-  it('then pushes the dashboards and the alert rules, with a job that is removed afterwards', () => {
+  it("then sets up Kafka's topics and users, and pushes the dashboards and the alert rules, each with a job that is removed afterwards", () => {
     const { io, ran } = trial();
     main(['up'], io);
-    expect(ran).toEqual([start, push]);
+    expect(ran).toEqual([start, setup, push]);
   });
 
   it('then says where each service can be opened', () => {
@@ -93,8 +94,17 @@ describe('zigordev-stack up', () => {
     );
   });
 
+  it("fails with the code of Kafka's set-up, pushes nothing, and says that the services are up, when the set-up fails", () => {
+    const { io, ran, output } = trial('kafka-setup');
+    expect(main(['up'], io)).toBe(3);
+    expect(ran).toEqual([start, setup]);
+    expect(output()).toBe(
+      "zigordev-stack: the services are up, but Kafka's topics and users could not be set up. The lines above say why\n"
+    );
+  });
+
   it('fails with the code of the push, and says that the services are up, when the push fails', () => {
-    const { io, output } = trial('run');
+    const { io, output } = trial('gcx');
     expect(main(['up'], io)).toBe(3);
     expect(output()).toBe(
       'zigordev-stack: the services are up, but the dashboards and the alert rules could not be pushed. The lines above say why\n'
@@ -120,7 +130,7 @@ describe('zigordev-stack reset', () => {
   it('deletes the data, then starts the services and pushes again', () => {
     const { io, ran, output } = trial();
     expect(main(['reset'], io)).toBe(0);
-    expect(ran).toEqual([`docker compose ${both} down --volumes`, start, push]);
+    expect(ran).toEqual([`docker compose ${both} down --volumes`, start, setup, push]);
     expect(output()).toContain('The shared services are up:');
   });
 

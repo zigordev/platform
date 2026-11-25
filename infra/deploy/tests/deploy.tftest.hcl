@@ -162,6 +162,8 @@ run "the_host_reads_only_what_each_target_names_and_keeps_the_records" {
       "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/GRAFANA_LOKI_USER",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/GRAFANA_OTLP_URL",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/GRAFANA_STACK_ID",
+      "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/KAFKA_ADMIN_PASSWORD",
+      "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/KAFKA_SETUP_PASSWORD",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/shop/*",
     ])
     error_message = "The host reads the shared services' secrets by name, never all of /platform, and each product's own path."

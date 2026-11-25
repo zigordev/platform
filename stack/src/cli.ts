@@ -25,7 +25,8 @@ const usage = [
   '       zigordev-stack reset',
   '',
   'up     Starts the shared services and waits until each one is healthy.',
-  '       It then pushes the dashboards and the alert rules to the local Grafana.',
+  "       It then sets up Kafka's topics and users, and pushes the dashboards",
+  '       and the alert rules to the local Grafana.',
   '       When the services are running already, it changes nothing.',
   'down   Stops them and keeps their data.',
   'reset  Stops them, deletes their data and starts them again.',
@@ -53,6 +54,13 @@ function up(io: Io): number {
       'zigordev-stack: not every shared service became healthy. The lines above name the one that did not\n'
     );
     return started;
+  }
+  const setUp = compose(io, 'run', '--rm', 'kafka-setup');
+  if (setUp !== 0) {
+    io.write(
+      "zigordev-stack: the services are up, but Kafka's topics and users could not be set up. The lines above say why\n"
+    );
+    return setUp;
   }
   const pushed = compose(io, 'run', '--rm', 'gcx');
   if (pushed !== 0) {

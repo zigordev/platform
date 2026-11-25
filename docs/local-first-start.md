@@ -23,12 +23,12 @@ pnpm check
 pnpm local:up
 ```
 
-| Step            | What it does                                                                                                                                                                                         | How you know it worked                                                                              |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `mise install`  | Installs the pinned tools for this folder. The first time, mise asks you to trust the repo's `mise.toml`: answer with `mise trust`                                                                   | `node --version` prints the version that `mise.toml` names                                          |
-| `pnpm install`  | Installs the dependencies from the lockfile, and installs the git hooks                                                                                                                              | Its last lines say `sync hooks` and name `pre-commit`, `commit-msg` and `pre-push`                  |
-| `pnpm check`    | Runs what the pipeline runs: lint, build, type check, and the tests with coverage                                                                                                                    | It ends with `check took` and a number of seconds, with no error above that line                    |
-| `pnpm local:up` | Builds the dashboard files, starts the five shared services and waits until each one is healthy, then pushes the dashboards and the alert rules. The first time, it downloads the images, about 5 GB | It ends with "The shared services are up:" and four addresses, and `http://grafana.localhost` opens |
+| Step            | What it does                                                                                                                                                                                                                          | How you know it worked                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `mise install`  | Installs the pinned tools for this folder. The first time, mise asks you to trust the repo's `mise.toml`: answer with `mise trust`                                                                                                    | `node --version` prints the version that `mise.toml` names                                          |
+| `pnpm install`  | Installs the dependencies from the lockfile, and installs the git hooks                                                                                                                                                               | Its last lines say `sync hooks` and name `pre-commit`, `commit-msg` and `pre-push`                  |
+| `pnpm check`    | Runs what the pipeline runs: lint, build, type check, and the tests with coverage                                                                                                                                                     | It ends with `check took` and a number of seconds, with no error above that line                    |
+| `pnpm local:up` | Builds the dashboard files, starts the six shared services and waits until each one is healthy, sets up Kafka's topics and users, then pushes the dashboards and the alert rules. The first time, it downloads the images, about 6 GB | It ends with "The shared services are up:" and four addresses, and `http://grafana.localhost` opens |
 
 One dependency is our own. `@zigordev/dev` holds the developer setup that every zigordev repo shares, and `pnpm install` takes it from the public npm registry like any other package.
 
@@ -43,7 +43,7 @@ One dependency is our own. `@zigordev/dev` holds the developer setup that every 
 
 In Grafana, the folder `zigordev` under Dashboards holds two dashboards: App, for one app picked from a list, and Platform, for the machine and the ingress. Under Alerting there are six rules, which on a laptop notify nobody.
 
-A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself, and the telemetry agent also on port 4318, for an app that runs as a process outside a container. Neither port is reachable from the network the laptop is on.
+A name that ends in `.localhost` always means this laptop, so nothing has to be added to a hosts file. The services listen on port 80 of the laptop itself. For an app that runs as a process outside a container, the telemetry agent also listens on port 4318, and the Kafka broker on port 9094. None of these ports is reachable from the network the laptop is on.
 
 `pnpm local:down` stops them and keeps their data. `pnpm local:reset` deletes the data too and starts again. [The package's own page](../stack/README.md) explains each service, and what to do when one does not start.
 

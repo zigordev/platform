@@ -1,26 +1,28 @@
 # @zigordev/stack
 
-The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, a local Grafana and a mail catcher. They are two compose files, the standard dashboards and alert rules, and one command that starts it all.
+The shared services of the zigordev platform for a laptop: the ingress, the telemetry agent, the Kafka broker, a local Grafana and a mail catcher. They are two compose files, the standard dashboards and alert rules, and one command that starts it all.
 
 ## What it is
 
-Five containers that every product on the laptop shares. Three of them run in production too, from the same file.
+Six containers that every product on the laptop shares. Four of them run in production too, from the same file.
 
-| Service        | Image                        | What it does                                                                                                                                                | Runs                      |
-| -------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `traefik`      | Traefik 3.7                  | The ingress. It sends each address to its container, from the labels that the container carries                                                             | Everywhere                |
-| `docker-proxy` | wollomatic/socket-proxy 1.14 | A filtered door to Docker. It lets the ingress and the agent read which containers exist, and nothing else                                                  | Everywhere                |
-| `alloy`        | Grafana Alloy 1.22           | The telemetry agent. It receives traces and metrics from every app, reads every container's log lines and the machine's own numbers, and forwards all of it | Everywhere                |
-| `lgtm`         | grafana/otel-lgtm 0.41       | The local Grafana, with its stores for logs, traces and metrics in the same container                                                                       | Laptop only               |
-| `mailpit`      | Mailpit 1.34                 | The mail catcher. It receives every email an app sends on the laptop, and shows it on a page                                                                | Laptop only               |
-| `gcx`          | Grafana gcx 1.8              | Not a service but a job: it pushes the dashboards and the alert rules to the local Grafana, and ends                                                        | Laptop only, on each `up` |
+| Service        | Image                        | What it does                                                                                                                                                                              | Runs                                    |
+| -------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `traefik`      | Traefik 3.7                  | The ingress. It sends each address to its container, from the labels that the container carries                                                                                           | Everywhere                              |
+| `docker-proxy` | wollomatic/socket-proxy 1.14 | A filtered door to Docker. It lets the ingress and the agent read which containers exist, and nothing else                                                                                | Everywhere                              |
+| `alloy`        | Grafana Alloy 1.22           | The telemetry agent. It receives traces and metrics from every app, reads every container's log lines and the machine's own numbers, and forwards all of it                               | Everywhere                              |
+| `kafka`        | Apache Kafka 4.4             | The broker for events between services: one node that is broker and controller at once. Every client signs in with SCRAM-SHA-512 as a user of its own, and may do only what a rule allows | Everywhere                              |
+| `kafka-setup`  | Apache Kafka 4.4             | Not a service but a job: it adds Kafka's topics, users and rules from the list `KAFKA_SETUP`, and ends. It never deletes anything                                                         | Everywhere, after the broker is healthy |
+| `lgtm`         | grafana/otel-lgtm 0.41       | The local Grafana, with its stores for logs, traces and metrics in the same container                                                                                                     | Laptop only                             |
+| `mailpit`      | Mailpit 1.34                 | The mail catcher. It receives every email an app sends on the laptop, and shows it on a page                                                                                              | Laptop only                             |
+| `gcx`          | Grafana gcx 1.8              | Not a service but a job: it pushes the dashboards and the alert rules to the local Grafana, and ends                                                                                      | Laptop only, on each `up`               |
 
-| File                 | What it holds                                                                                                              |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `compose.yaml`       | The three services that run everywhere, with the agent's config inside                                                     |
-| `compose.local.yaml` | What only the laptop has: the two other services, the local addresses, the published port and the settings                 |
-| `observability/`     | The dashboards and the alert rules as files, which `pnpm build` writes from the code in the repo's `observability/` folder |
-| `bin/` and `src/`    | The command `zigordev-stack`, which starts and stops them                                                                  |
+| File                 | What it holds                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `compose.yaml`       | The four services that run everywhere, with the agent's config inside, and Kafka's job with its list of topics, users and rules          |
+| `compose.local.yaml` | What only the laptop has: the two other services, the local addresses, the published ports, the settings and Kafka's throwaway passwords |
+| `observability/`     | The dashboards and the alert rules as files, which `pnpm build` writes from the code in the repo's `observability/` folder               |
+| `bin/` and `src/`    | The command `zigordev-stack`, which starts and stops them                                                                                |
 
 ```mermaid
 flowchart LR
@@ -30,6 +32,7 @@ flowchart LR
   traefik --> mailpit
   app -->|traces and metrics| alloy
   app -->|email| mailpit
+  app -->|events, signed in| kafka
   alloy -->|logs, traces, metrics| lgtm
   traefik -.->|which containers exist| proxy["docker-proxy"]
   alloy -.->|which containers exist, and their log lines| proxy
@@ -40,7 +43,7 @@ flowchart LR
 
 Every product needs an ingress, somewhere to send its telemetry and somewhere to send its mail. Without this package each product would bring its own, and two products could not run side by side on one laptop: both would want port 80, and their logs would land in two places.
 
-Because the same three services run in production from the same file, a route or a log line that works on the laptop works there too. What differs is a short list of settings, and it is written down below.
+Because the same four services run in production from the same file, a route or a log line that works on the laptop works there too. What differs is a short list of settings, and it is written down below.
 
 Without the Docker proxy, the ingress and the agent would hold Docker's socket itself, which is the right to start any container with any privilege. A flaw in either would then be a flaw in the whole machine.
 
@@ -48,13 +51,15 @@ Without the Docker proxy, the ingress and the agent would hold Docker's socket i
 
 ### One project, one network, fixed names
 
-The five containers form one Compose project named `platform`, whichever folder the files are started from. A product starts the same project from its own copy of this package, so a second start changes nothing, and two products share one set of services.
+The six containers form one Compose project named `platform`, whichever folder the files are started from. A product starts the same project from its own copy of this package, so a second start changes nothing, and two products share one set of services.
 
 | Name              | What it is                                                                                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `zigordev`        | The network that every app joins. On it, the services answer to their own names                                                                      |
 | `alloy:4318`      | Where an app sends its traces and metrics, over OTLP on HTTP. Port 4317 takes the same over gRPC                                                     |
 | `127.0.0.1:4318`  | The same port, published on the laptop itself, for an app that runs as a process outside a container, such as one started with `pnpm dev`. HTTP only |
+| `kafka:9092`      | Where an app in a container reaches Kafka, signed in with SCRAM-SHA-512 as its own user                                                              |
+| `localhost:9094`  | The same broker, published on the laptop itself, for an app that runs as a process outside a container                                               |
 | `mailpit:1025`    | Where an app sends its mail on the laptop, over SMTP                                                                                                 |
 | `zigordev-docker` | A second network with no way out. Only the Docker proxy, the ingress and the agent are on it                                                         |
 
@@ -97,26 +102,27 @@ A new app needs no entry anywhere. It appears in the list of the App dashboard w
 
 ### Each container is boxed in
 
-| Rule                                                                                                    | Why                                                                                           |
-| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| An exact image version and its digest                                                                   | The same bytes everywhere, and a tag pushed again changes nothing. Renovate proposes the next |
-| A health check                                                                                          | `up` can wait for it, and the ingress can trust it                                            |
-| A restart unless it was stopped                                                                         | The host restarts at night for updates, and every service comes back by itself                |
-| A memory limit and a CPU limit                                                                          | One service cannot starve the others                                                          |
-| An init process, no new privileges, no capabilities, at most 30 seconds to stop                         | A broken service stays inside its box and stops cleanly                                       |
-| A user that is not root, and a read-only file system                                                    | A flaw in the service cannot change the service                                               |
-| No published port, except port 80 of the ingress and port 4318 of the agent, both on this laptop itself | Nothing is reachable from the network the laptop is on                                        |
+| Rule                                                                                                                            | Why                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| An exact image version and its digest                                                                                           | The same bytes everywhere, and a tag pushed again changes nothing. Renovate proposes the next |
+| A health check                                                                                                                  | `up` can wait for it, and the ingress can trust it                                            |
+| A restart unless it was stopped                                                                                                 | The host restarts at night for updates, and every service comes back by itself                |
+| A memory limit and a CPU limit                                                                                                  | One service cannot starve the others                                                          |
+| An init process, no new privileges, no capabilities, at most 30 seconds to stop                                                 | A broken service stays inside its box and stops cleanly                                       |
+| A user that is not root, and a read-only file system                                                                            | A flaw in the service cannot change the service                                               |
+| No published port, except port 80 of the ingress, port 4318 of the agent and port 9094 of the broker, all on this laptop itself | Nothing is reachable from the network the laptop is on                                        |
 
-`src/compose.test.ts` holds every service to these rules, one by one, and the job `gcx` to all but the health check, which a job that ends does not need. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
+`src/compose.test.ts` holds every service to these rules, one by one, and the jobs `gcx` and `kafka-setup` to all but the health check, which a job that ends does not need. The broker keeps a read-only root by writing only to its data volume and to two folders in memory: the settings its image writes at each start, and `/tmp`. `lgtm` is the one exception to the last-but-one row: it is six programs in one container, which start as root and write to their own folders. It runs on the laptop only.
 
-| Service        | Memory limit | CPU limit | Used when idle on 2026-11-22      |
-| -------------- | ------------ | --------- | --------------------------------- |
-| `traefik`      | 128 MiB      | 1         | 24 MiB                            |
-| `docker-proxy` | 64 MiB       | 0.25      | 11 MiB                            |
-| `alloy`        | 256 MiB      | 1         | 51 MiB                            |
-| `lgtm`         | 2 GiB        | 2         | 614 MiB                           |
-| `mailpit`      | 128 MiB      | 0.5       | 10 MiB                            |
-| `cloudflared`  | 128 MiB      | 0.5       | Not measured yet, production only |
+| Service        | Memory limit | CPU limit | Used when idle on 2026-11-22               |
+| -------------- | ------------ | --------- | ------------------------------------------ |
+| `traefik`      | 128 MiB      | 1         | 24 MiB                                     |
+| `docker-proxy` | 64 MiB       | 0.25      | 11 MiB                                     |
+| `alloy`        | 256 MiB      | 1         | 51 MiB                                     |
+| `lgtm`         | 2 GiB        | 2         | 614 MiB                                    |
+| `mailpit`      | 128 MiB      | 0.5       | 10 MiB                                     |
+| `kafka`        | 1 GiB        | 1         | 397 MiB on 2026-11-25, with a 512 MiB heap |
+| `cloudflared`  | 128 MiB      | 0.5       | Not measured yet, production only          |
 
 ### The Docker proxy
 
@@ -134,21 +140,57 @@ Traefik takes all its settings from variables, so its own health check reads the
 
 Traefik warns once at each start that it "can reject some encoded characters in the request path". That is a notice about a setting we leave as it is.
 
+### The broker
+
+Kafka carries the events that one service sends to another. It is one node, broker and controller at once, so it keeps one copy of each message. Its data sits in the volume `kafka-data`, which in production is on the data disk, inside the disk's daily snapshot.
+
+Every client signs in with SCRAM-SHA-512 as a user of its own, and may do only what a rule allows. A user without a rule can do nothing, and writing to a topic never makes it. So a typo in a topic's name fails at once, instead of making a second topic.
+
+The list `KAFKA_SETUP`, in the settings of the job `kafka-setup` in `compose.yaml`, holds every topic, user and rule, one per line. The job runs once the broker is healthy, signs in as the user `setup`, adds what is missing, and ends. It never deletes: a line that goes leaves its topic, user or rule on the broker, because a topic holds data.
+
+| Line                                    | What it adds                                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `topic <name> <partitions>`             | A topic with that many partitions, and one copy of each message                                                                                        |
+| `user <name>`                           | A user. Its password comes from the job's variable `KAFKA_PASSWORD_<NAME>`, the name in capitals with `-` as `_`, and the job stops when it is not set |
+| `allow <user> <operation> topic <name>` | A rule: the user may do the operation, such as `Read`, `Write` or `Describe`, on that topic                                                            |
+| `allow <user> <operation> group <name>` | The same for a consumer group, which a reader needs too                                                                                                |
+| Either `allow` line, ending `prefixed`  | The rule covers every name that starts with `<name>`                                                                                                   |
+
+For example, an app `notes-api` that sends to `notes.requests`, reads it in the group `notes-api.counts`, and sets failed messages aside, as `@zigordev/events` does, needs these lines:
+
+```yaml
+KAFKA_SETUP: |
+  topic notes.requests 3
+  topic notes.requests.dead-letter 1
+  user notes-api
+  allow notes-api Write topic notes.requests
+  allow notes-api Read topic notes.requests
+  allow notes-api Write topic notes.requests.dead-letter
+  allow notes-api Read group notes-api. prefixed
+```
+
+On the laptop the job also needs `KAFKA_PASSWORD_NOTES_API`, a throwaway password in `compose.local.yaml`. The app reaches the broker with three settings, which `@zigordev/events` reads: `KAFKA_BROKERS: kafka:9092`, `KAFKA_USERNAME: notes-api` and `KAFKA_PASSWORD`, the same password. Where an app's password lives in production is decided with the first app that needs one.
+
+The broker formats its own storage before the image starts it, and makes the users `admin` and `setup` there, because image 4.4.0 ignores the setting that would do that. [Record 0027](../docs/adr/0027-the-broker-formats-its-own-storage-and-one-list-holds-its-topics-users-and-rules.md) says why.
+
 ### The laptop and production
 
 The host starts `compose.yaml` with `compose.production.yaml`, through the deploy path of platform: every merge to `main` deploys them as the target `platform`. `docs/cloud-first-deploy.md` in platform says how.
 
-| Thing                                  | On the laptop                                                        | In production                                                                                                                                                                                                                |
-| -------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The three shared services              | From `compose.yaml`                                                  | The same file                                                                                                                                                                                                                |
-| How a request arrives                  | Port 80 on the laptop itself, over IPv4 and IPv6                     | Through Cloudflare's tunnel. `cloudflared`, its connector, runs in production only and hands each request to the ingress                                                                                                     |
-| How an app outside a container reports | To `127.0.0.1:4318`, the agent's port published on the laptop itself | Every app runs in a container, so the port is not published                                                                                                                                                                  |
-| Where the agent sends                  | To `lgtm`, with a made-up name and password that nothing checks      | To Grafana Cloud, with the secrets that `.env.production.example` names. Traces and metrics go to `${GRAFANA_OTLP_URL}/otlp`, and logs to `${GRAFANA_LOKI_URL}/loki/api/v1/push`, because the stored addresses carry no path |
-| Each container's memory                | No file, so the agent reads none                                     | The host's file `/var/lib/platform/metrics/containers.prom`, which a timer writes every minute                                                                                                                               |
-| The backups' results                   | No file, so the agent reads none                                     | The host's files `/var/lib/platform/metrics/backup-dump.prom` and `backup-restore-test.prom`, which the backup script writes after each run                                                                                  |
-| Grafana and the mail catcher           | `lgtm` and `mailpit`                                                 | Grafana Cloud and Amazon SES                                                                                                                                                                                                 |
-| The ingress's own pages                | At `traefik.localhost`                                               | Off                                                                                                                                                                                                                          |
-| The proxy's group                      | 0, which owns the socket on Docker Desktop                           | The group that owns the socket on the host, which the deploy passes as `DOCKER_SOCKET_GROUP`                                                                                                                                 |
+| Thing                                        | On the laptop                                                          | In production                                                                                                                                                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The four shared services                     | From `compose.yaml`                                                    | The same file                                                                                                                                                                                                                |
+| How a request arrives                        | Port 80 on the laptop itself, over IPv4 and IPv6                       | Through Cloudflare's tunnel. `cloudflared`, its connector, runs in production only and hands each request to the ingress                                                                                                     |
+| How an app outside a container reports       | To `127.0.0.1:4318`, the agent's port published on the laptop itself   | Every app runs in a container, so the port is not published                                                                                                                                                                  |
+| How an app outside a container reaches Kafka | `localhost:9094`, a listener published on the laptop itself            | Every app runs in a container, so there is no such listener                                                                                                                                                                  |
+| Kafka's passwords                            | Throwaway ones in `compose.local.yaml`                                 | The host's secrets `KAFKA_ADMIN_PASSWORD` and `KAFKA_SETUP_PASSWORD`, which `.env.production.example` names                                                                                                                  |
+| Kafka's topics, users and rules              | `zigordev-stack up` runs the job `kafka-setup` after the health checks | The deploy runs the job after the broker is healthy, as it runs a product's migrate job                                                                                                                                      |
+| Where the agent sends                        | To `lgtm`, with a made-up name and password that nothing checks        | To Grafana Cloud, with the secrets that `.env.production.example` names. Traces and metrics go to `${GRAFANA_OTLP_URL}/otlp`, and logs to `${GRAFANA_LOKI_URL}/loki/api/v1/push`, because the stored addresses carry no path |
+| Each container's memory                      | No file, so the agent reads none                                       | The host's file `/var/lib/platform/metrics/containers.prom`, which a timer writes every minute                                                                                                                               |
+| The backups' results                         | No file, so the agent reads none                                       | The host's files `/var/lib/platform/metrics/backup-dump.prom` and `backup-restore-test.prom`, which the backup script writes after each run                                                                                  |
+| Grafana and the mail catcher                 | `lgtm` and `mailpit`                                                   | Grafana Cloud and Amazon SES                                                                                                                                                                                                 |
+| The ingress's own pages                      | At `traefik.localhost`                                                 | Off                                                                                                                                                                                                                          |
+| The proxy's group                            | 0, which owns the socket on Docker Desktop                             | The group that owns the socket on the host, which the deploy passes as `DOCKER_SOCKET_GROUP`                                                                                                                                 |
 
 ## How to use it, with one worked example
 
@@ -160,7 +202,7 @@ pnpm local:down
 pnpm local:reset
 ```
 
-`local:up` builds the dashboard files, starts the services and waits until each one is healthy. It then pushes the dashboards and the alert rules, and prints the four addresses. `local:down` stops them and keeps their data. `local:reset` stops them, deletes their data and starts them again.
+`local:up` builds the dashboard files, starts the services and waits until each one is healthy. It then sets up Kafka's topics, users and rules, pushes the dashboards and the alert rules, and prints the four addresses. `local:down` stops them and keeps their data. `local:reset` stops them, deletes their data and starts them again.
 
 | Address                    | What opens                                                            |
 | -------------------------- | --------------------------------------------------------------------- |
@@ -203,11 +245,11 @@ pnpm add --save-dev @zigordev/stack
 pnpm exec zigordev-stack up
 ```
 
-| Command                | What it does                                                                                                                                   |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `zigordev-stack up`    | Starts the services, waits until each one is healthy, and pushes the dashboards and the alert rules. When they run already, it changes nothing |
-| `zigordev-stack down`  | Stops them and keeps their data                                                                                                                |
-| `zigordev-stack reset` | Stops them, deletes their data and starts them again                                                                                           |
+| Command                | What it does                                                                                                                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zigordev-stack up`    | Starts the services, waits until each one is healthy, sets up Kafka's topics, users and rules, and pushes the dashboards and the alert rules. When they run already, it changes nothing |
+| `zigordev-stack down`  | Stops them and keeps their data                                                                                                                                                         |
+| `zigordev-stack reset` | Stops them, deletes their data and starts them again                                                                                                                                    |
 
 The package holds the two compose files, the dashboard and alert files already built, and the command. It has no dependency of its own. It needs Node.js 26 or later, and Docker running.
 
@@ -217,23 +259,25 @@ Every product starts the same project, named `platform`. Two products that hold 
 
 ## How to check that it works, and what to do when it does not
 
-| Try this                                                                     | What must happen                                                                                                                                  |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm local:up`                                                              | It ends with "The shared services are up:" and the four addresses                                                                                 |
-| `pnpm local:up` a second time                                                | The same, within seconds, and no container is recreated                                                                                           |
-| Open `http://grafana.localhost`, then Dashboards, then the folder `zigordev` | The dashboards App and Platform are there, and Platform shows the machine's numbers                                                               |
-| In Grafana, open Alerting, then Alert rules                                  | Six rules are listed in the folder `zigordev`, each one "Normal"                                                                                  |
-| Open `http://grafana.localhost` and `http://mail.localhost`                  | Both pages open, with no sign-in                                                                                                                  |
-| In Grafana's Explore, pick Loki and run `{service_name="traefik"}`           | Traefik's own log lines show                                                                                                                      |
-| Open `http://nothing.localhost`                                              | Traefik answers 404, because no container asked for that address                                                                                  |
-| `pnpm exec vitest run stack`                                                 | Every rule on this page that a machine can check passes                                                                                           |
-| Open a pull request                                                          | The job "Shared services" starts all five on GitHub's machine, opens the four addresses and stops them. A change that breaks a start cannot merge |
+| Try this                                                                     | What must happen                                                                                                                                 |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm local:up`                                                              | It prints "kafka-setup: done", and ends with "The shared services are up:" and the four addresses                                                |
+| `pnpm local:up` a second time                                                | The same, within seconds, and no service is recreated                                                                                            |
+| Open `http://grafana.localhost`, then Dashboards, then the folder `zigordev` | The dashboards App and Platform are there, and Platform shows the machine's numbers                                                              |
+| In Grafana, open Alerting, then Alert rules                                  | Six rules are listed in the folder `zigordev`, each one "Normal"                                                                                 |
+| Open `http://grafana.localhost` and `http://mail.localhost`                  | Both pages open, with no sign-in                                                                                                                 |
+| In Grafana's Explore, pick Loki and run `{service_name="traefik"}`           | Traefik's own log lines show                                                                                                                     |
+| Open `http://nothing.localhost`                                              | Traefik answers 404, because no container asked for that address                                                                                 |
+| `pnpm exec vitest run stack`                                                 | Every rule on this page that a machine can check passes                                                                                          |
+| Open a pull request                                                          | The job "Shared services" starts all six on GitHub's machine, opens the four addresses and stops them. A change that breaks a start cannot merge |
 
 | What you see                                                                    | What it means                                                                                                                                                        | What to do                                                                                                                                            |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Cannot connect to the Docker daemon`                                           | Docker is not running                                                                                                                                                | Start Docker Desktop                                                                                                                                  |
 | `Bind for 127.0.0.1:80 failed: port is already allocated`                       | Another program on the laptop holds port 80                                                                                                                          | Find it with `lsof -nP -iTCP:80 -sTCP:LISTEN`, and stop it                                                                                            |
 | `Bind for 127.0.0.1:4318 failed: port is already allocated`                     | Another program on the laptop holds port 4318, often another OpenTelemetry collector                                                                                 | Find it with `lsof -nP -iTCP:4318 -sTCP:LISTEN`, and stop it                                                                                          |
+| `Bind for 127.0.0.1:9094 failed: port is already allocated`                     | Another program on the laptop holds port 9094, often another Kafka                                                                                                   | Find it with `lsof -nP -iTCP:9094 -sTCP:LISTEN`, and stop it                                                                                          |
+| `local:up` says Kafka's topics and users could not be set up                    | The job `kafka-setup` could not sign in, or a line of `KAFKA_SETUP` is wrong, or a user's password is not set                                                        | The line above "zigordev-stack:" starts with "kafka-setup:" and says which. Each line takes one of the three forms of record 0027                     |
 | `local:up` ends with "not every shared service became healthy"                  | One container did not pass its health check in 5 minutes                                                                                                             | The lines above name it. `docker logs platform-<service>-1` shows why                                                                                 |
 | `zigordev-stack up` says "the dashboard files are missing"                      | The files in `stack/observability/` are built, not committed                                                                                                         | `pnpm build`, which `pnpm local:up` does by itself                                                                                                    |
 | `local:up` says the dashboards and the alert rules could not be pushed          | gcx could not reach Grafana, or Grafana refused a file                                                                                                               | The lines above name the file and the reason. `pnpm exec vitest run observability` checks the files' shape                                            |
