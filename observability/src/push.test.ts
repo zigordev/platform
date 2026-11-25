@@ -1,9 +1,11 @@
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  awake,
   dockerGcx,
+  type Fetch,
   type Gcx,
   type GcxResult,
   gcxImage,
@@ -13,6 +15,7 @@ import {
   push,
   run,
   stale,
+  wakeAttempts,
 } from './push.ts';
 
 const ok = (stdout = ''): GcxResult => ({ code: 0, stdout, stderr: '' });
@@ -294,36 +297,166 @@ describe('dockerGcx', () => {
   });
 });
 
+describe('awake', () => {
+  function answers(...statuses: (number | 'timeout')[]) {
+    const asked: string[] = [];
+    const fetcher: Fetch = (url) => {
+      asked.push(url);
+      const status = statuses.shift() ?? 200;
+      return status === 'timeout'
+        ? Promise.reject(new Error('The operation was aborted due to timeout'))
+        : Promise.resolve({ status });
+    };
+    return { asked, fetcher };
+  }
+
+  function pauses() {
+    const waited: number[] = [];
+    return {
+      waited,
+      pause: (ms: number) => {
+        waited.push(ms);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it('goes on at once when Grafana answers, and asks only its health page, which needs no token', async () => {
+    const { asked, fetcher } = answers(200);
+    const { waited, pause } = pauses();
+    const { out, output } = capture();
+    expect(await awake('https://stand-in.grafana.net', output, fetcher, pause)).toBe(true);
+    expect(asked).toEqual(['https://stand-in.grafana.net/api/health']);
+    expect(waited).toEqual([]);
+    expect(out).toEqual([]);
+  });
+
+  it('waits while Grafana wakes up, as on 2026-11-25 when its first answer was a 522 after 20 seconds', async () => {
+    const { asked, fetcher } = answers(522, 'timeout', 200);
+    const { waited, pause } = pauses();
+    const { out, output } = capture();
+    expect(await awake('https://stand-in.grafana.net', output, fetcher, pause)).toBe(true);
+    expect(asked).toHaveLength(3);
+    expect(waited).toEqual([5000, 5000]);
+    expect(out.join('')).toContain('Grafana answered 522 to attempt 1 of 6');
+    expect(out.join('')).toContain('Grafana answered nothing to attempt 2 of 6');
+  });
+
+  it('gives up after six attempts, about two and a half minutes at most, and says so', async () => {
+    const { asked, fetcher } = answers(503, 503, 503, 503, 503, 503);
+    const { waited, pause } = pauses();
+    const { err, output } = capture();
+    expect(wakeAttempts).toBe(6);
+    expect(await awake('https://stand-in.grafana.net', output, fetcher, pause)).toBe(false);
+    expect(asked).toHaveLength(6);
+    expect(waited).toHaveLength(5);
+    expect(err.join('')).toContain(
+      'Grafana did not wake up after 6 attempts, so nothing was pushed'
+    );
+  });
+
+  it('pauses 5 seconds between attempts by itself', async () => {
+    vi.useFakeTimers();
+    try {
+      const { fetcher } = answers(503, 200);
+      const { output } = capture();
+      let done = false;
+      const woken = awake('https://stand-in.grafana.net', output, fetcher).then((answer) => {
+        done = true;
+        return answer;
+      });
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await woken).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('run', () => {
   const env = { GRAFANA_SERVER: 'https://stand-in.grafana.net', GRAFANA_TOKEN: 'stand-in' };
+  const ready = () => Promise.resolve(true);
 
-  it('prints how to use it without a folder', () => {
+  it('prints how to use it without a folder', async () => {
     const { err, output } = capture();
-    expect(run([], env, output, () => () => ok())).toBe(2);
+    expect(await run([], env, output, () => () => ok(), ready)).toBe(2);
     expect(err.join('')).toContain('Usage: node src/push-main.ts <folder>');
   });
 
-  it('names the settings that are missing, and pushes nothing', () => {
+  it('names the settings that are missing, and pushes nothing', async () => {
     const { err, output } = capture();
     let called = false;
-    const code = run([work], { GRAFANA_SERVER: '' }, output, () => {
-      called = true;
-      return () => ok();
-    });
+    const code = await run(
+      [work],
+      { GRAFANA_SERVER: '' },
+      output,
+      () => {
+        called = true;
+        return () => ok();
+      },
+      ready
+    );
     expect(code).toBe(2);
     expect(called).toBe(false);
     expect(err.join('')).toContain('GRAFANA_SERVER and GRAFANA_TOKEN must be set');
   });
 
-  it('pushes the folder it was given', () => {
+  it('pushes nothing when Grafana does not wake up', async () => {
+    const { output } = capture();
+    let called = false;
+    let woken = '';
+    const code = await run(
+      [work],
+      env,
+      output,
+      () => {
+        called = true;
+        return () => ok();
+      },
+      (server) => {
+        woken = server;
+        return Promise.resolve(false);
+      }
+    );
+    expect(code).toBe(1);
+    expect(woken).toBe('https://stand-in.grafana.net');
+    expect(called).toBe(false);
+  });
+
+  it('pushes the folder it was given, once Grafana answers', async () => {
     const folder = files(manifest('Dashboard', 'app', 'zigordev'));
     const { output } = capture();
     let given = '';
-    const code = run([folder], env, output, (target) => {
-      given = target;
-      return () => ok(listing());
-    });
+    const code = await run(
+      [folder],
+      env,
+      output,
+      (target) => {
+        given = target;
+        return () => ok(listing());
+      },
+      ready
+    );
     expect(code).toBe(0);
     expect(given).toBe(folder);
+  });
+
+  it("asks Grafana's health page through fetch by itself before it pushes", async () => {
+    const folder = files(manifest('Dashboard', 'app', 'zigordev'));
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', (url: string) => {
+      asked.push(url);
+      return Promise.resolve({ status: 200 });
+    });
+    try {
+      const { output } = capture();
+      const code = await run([folder], env, output, () => () => ok(listing()));
+      expect(code).toBe(0);
+      expect(asked).toEqual(['https://stand-in.grafana.net/api/health']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

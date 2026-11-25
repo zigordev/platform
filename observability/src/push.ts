@@ -131,12 +131,54 @@ export function dockerGcx(image: string, folder: string): Gcx {
   };
 }
 
-export function run(
+export type Fetch = (url: string, init: { signal: AbortSignal }) => Promise<{ status: number }>;
+
+export const wakeAttempts = 6;
+const wakeTimeout = 20_000;
+const wakePause = 5_000;
+
+function pauseFor(ms: number): Promise<void> {
+  return new Promise((done) => {
+    setTimeout(done, ms);
+  });
+}
+
+export async function awake(
+  server: string,
+  output: Output,
+  fetcher: Fetch = fetch,
+  pause: (ms: number) => Promise<void> = pauseFor
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= wakeAttempts; attempt += 1) {
+    const status = await fetcher(`${server}/api/health`, {
+      signal: AbortSignal.timeout(wakeTimeout),
+    }).then(
+      (answer) => answer.status,
+      () => 0
+    );
+    if (status === 200) {
+      return true;
+    }
+    output.out(
+      `push: Grafana answered ${status === 0 ? 'nothing' : status} to attempt ${attempt} of ${wakeAttempts}, so the push waits for it to wake up\n`
+    );
+    if (attempt < wakeAttempts) {
+      await pause(wakePause);
+    }
+  }
+  output.err(
+    `push: Grafana did not wake up after ${wakeAttempts} attempts, so nothing was pushed\n`
+  );
+  return false;
+}
+
+export async function run(
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
   output: Output,
-  gcxFor: (folder: string) => Gcx
-): number {
+  gcxFor: (folder: string) => Gcx,
+  wake: (server: string) => Promise<boolean> = (server) => awake(server, output)
+): Promise<number> {
   const [folder, ...rest] = args;
   if (folder === undefined || rest.length > 0) {
     output.err('Usage: node src/push-main.ts <folder>\n');
@@ -146,6 +188,9 @@ export function run(
   if (missing.length > 0) {
     output.err(`push: ${missing.join(' and ')} must be set\n`);
     return 2;
+  }
+  if (!(await wake(env.GRAFANA_SERVER ?? ''))) {
+    return 1;
   }
   return push(folder, gcxFor(folder), output);
 }
