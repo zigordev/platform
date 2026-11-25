@@ -181,28 +181,42 @@ jobs:
     name: Observability changes
     if: github.event_name == 'push'
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
       push: ${{ steps.decide.outputs.push }}
+    env:
+      LEFTHOOK: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 2
 
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
       - name: Decide whether the dashboards and alerts go to Grafana Cloud
         id: decide
         run: |
           enabled="$(jq -r .grafanaCloud observability/push.json)"
-          changed="$(git diff --name-only HEAD~1 HEAD -- observability infra/grafana)"
+          build() {
+            pnpm install --frozen-lockfile > /dev/null &&
+              pnpm --filter platform-observability run build > /dev/null &&
+              cp -R stack/observability "$1"
+          }
+          build "$RUNNER_TEMP/after"
+          if git checkout --quiet HEAD~1 && build "$RUNNER_TEMP/before"; then
+            changed="$(diff -rq "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" || true)"
+          else
+            changed="the files of the commit before could not be built"
+          fi
           if [ "$enabled" = "true" ] && [ -n "$changed" ]; then
             echo "push=true" >> "$GITHUB_OUTPUT"
           else
             echo "push=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "The switch is $enabled, and the merge changed: ${changed:-nothing that is pushed}"
+          echo "The switch is $enabled, and the files gcx pushes changed: ${changed:-not at all}"
 
   observability-push:
     name: Observability push
