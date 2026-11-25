@@ -1,0 +1,9 @@
+[Unit]
+Description=Dumps every product's PostgreSQL to S3
+Requires=docker.service
+After=docker.service
+RequiresMountsFor=/srv/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/platform-backup dump

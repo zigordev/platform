@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bucket="${PLATFORM_BACKUP_BUCKET:-zigordev-platform-backups}"
+region="${PLATFORM_BACKUP_REGION:-eu-west-1}"
+state="${PLATFORM_BACKUP_STATE:-/srv/data/platform/backups}"
+metrics="${PLATFORM_METRICS_DIR:-/var/lib/platform/metrics}"
+counts="SELECT format('%I.%I', n.nspname, c.relname) || E'\\t' || (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM %I.%I', n.nspname, c.relname), false, true, '')))[1]::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND n.nspname NOT IN ('pg_catalog', 'information_schema') ORDER BY 1"
+
+sql() {
+  local id="$1" db="$2"
+  shift 2
+  docker exec -i --user postgres "$id" psql -X -q -At -v ON_ERROR_STOP=1 --dbname "$db" "$@"
+}
+
+plain() {
+  case "$1" in
+    '' | *[!a-z0-9_-]*)
+      echo "${0##*/}: refusing the name '$1'" >&2
+      return 1
+      ;;
+  esac
+}
+
+since() {
+  cat "$state/$1" 2> /dev/null || echo 0
+}
+
+dump() {
+  local id="$1" project="$2" dir="$3" prefix db file
+  prefix="$project/$(date -u +%Y-%m-%d/%H%M%SZ)"
+  docker exec --user postgres "$id" pg_dumpall --globals-only > "$dir/globals.sql" || return 1
+  sql "$id" postgres -c "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate AND datname <> 'postgres' ORDER BY 1" > "$dir/databases" < /dev/null || return 1
+  while IFS= read -r db; do
+    plain "$db" || return 1
+    sql "$id" "$db" > "$dir/$db.dump" << EOF || return 1
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT pg_export_snapshot() AS snapshot \gset
+\setenv PLATFORM_SNAPSHOT :snapshot
+\setenv PLATFORM_DB :DBNAME
+\! pg_dump --format=custom --snapshot="\$PLATFORM_SNAPSHOT" --dbname="\$PLATFORM_DB"
+\if :SHELL_ERROR
+DO \$\$ BEGIN RAISE EXCEPTION 'pg_dump failed'; END \$\$;
+\endif
+\o /tmp/platform-backup.counts
+$counts;
+\o
+COMMIT;
+EOF
+    docker exec --user postgres "$id" sh -c 'cat /tmp/platform-backup.counts && rm /tmp/platform-backup.counts' > "$dir/$db.counts" || return 1
+  done < "$dir/databases"
+  for file in "$dir"/*; do
+    aws s3 cp --only-show-errors --region "$region" "$file" "s3://$bucket/$prefix/${file##*/}" < /dev/null || return 1
+  done
+  aws s3 cp --only-show-errors --region "$region" "$dir/databases" "s3://$bucket/$prefix/complete" < /dev/null || return 1
+  cat "$dir"/* | wc -c | tr -d ' ' > "$state/$project.size"
+}
+
+restore() {
+  local id="$1" project="$2" dir="$3" image keys newest db tables=0
+  image="$(docker inspect --format '{{.Config.Image}}' "$id")" || return 1
+  keys="$(aws s3api list-objects-v2 --region "$region" --bucket "$bucket" --prefix "$project/" --query 'Contents[].Key' --output text < /dev/null)" || return 1
+  newest="$(printf '%s\n' $keys | grep '/complete$' | sort | tail -n 1 || true)"
+  if [ -z "$newest" ]; then
+    echo "restore-test: $project has no complete dump" >&2
+    return 1
+  fi
+  aws s3 cp --recursive --only-show-errors --region "$region" "s3://$bucket/${newest%/complete}/" "$dir/" < /dev/null || return 1
+  docker rm -f "zigordev-restore-$project" > /dev/null 2>&1 || true
+  docker run -d --name "zigordev-restore-$project" --network none --memory 256m -e POSTGRES_HOST_AUTH_METHOD=trust "$image" > /dev/null || return 1
+  for _ in $(seq 1 60); do
+    if docker exec "zigordev-restore-$project" pg_isready -q -h 127.0.0.1 -U postgres; then
+      break
+    fi
+    sleep 1
+  done
+  grep -v '^CREATE ROLE postgres;$' "$dir/globals.sql" | sql "zigordev-restore-$project" postgres > /dev/null || return 1
+  while IFS= read -r db; do
+    plain "$db" || return 1
+    docker exec -i --user postgres "zigordev-restore-$project" pg_restore --exit-on-error --create --dbname postgres < "$dir/$db.dump" || return 1
+    sql "zigordev-restore-$project" "$db" -c "$counts" > "$dir/$db.restored" < /dev/null || return 1
+    if ! cmp -s "$dir/$db.counts" "$dir/$db.restored"; then
+      echo "restore-test: the rows of $project/$db differ from the counts taken with its dump" >&2
+      return 1
+    fi
+    tables=$((tables + $(wc -l < "$dir/$db.counts")))
+  done < "$dir/databases"
+  echo "$tables" > "$state/$project.tables"
+}
+
+mode="${1:-}"
+case "$mode" in
+  dump) step=dump mark=dumped ;;
+  restore-test) step=restore mark=restored ;;
+  *)
+    echo "Usage: platform-backup dump|restore-test" >&2
+    exit 2
+    ;;
+esac
+
+mkdir -p "$state" "$metrics"
+stores="$(docker ps --filter label=com.zigordev.backup=postgres --format '{{.ID}} {{.Label "com.docker.compose.project"}}')"
+failed=0
+while read -r id project; do
+  [ -n "$id" ] || continue
+  dir="$(mktemp -d "$state/.work.XXXXXX")"
+  if plain "$project" && "$step" "$id" "$project" "$dir"; then
+    date +%s > "$state/$project.$mark"
+    echo "$mode: $project passed"
+  else
+    echo "$mode: $project failed" >&2
+    failed=1
+  fi
+  rm -rf "$dir"
+  if [ "$mode" = restore-test ]; then
+    docker rm -f "zigordev-restore-$project" > /dev/null 2>&1 || true
+  fi
+done <<< "$stores"
+
+draft="$(mktemp "$metrics/.backup.XXXXXX")"
+while read -r id project; do
+  plain "$project" 2> /dev/null || continue
+  if [ "$mode" = dump ]; then
+    printf 'platform_backup_last_success_timestamp_seconds{compose_project="%s"} %s\n' "$project" "$(since "$project.dumped")"
+    printf 'platform_backup_size_bytes{compose_project="%s"} %s\n' "$project" "$(since "$project.size")"
+  else
+    printf 'platform_restore_test_last_success_timestamp_seconds{compose_project="%s"} %s\n' "$project" "$(since "$project.restored")"
+    printf 'platform_restore_test_tables{compose_project="%s"} %s\n' "$project" "$(since "$project.tables")"
+  fi
+done <<< "$stores" > "$draft"
+chmod 0644 "$draft"
+mv "$draft" "$metrics/backup-$mode.prom"
+
+exit "$failed"

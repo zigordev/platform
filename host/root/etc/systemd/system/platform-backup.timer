@@ -1,0 +1,10 @@
+[Unit]
+Description=Dumps every product's PostgreSQL every hour
+
+[Timer]
+OnCalendar=*-*-* *:17:00 UTC
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

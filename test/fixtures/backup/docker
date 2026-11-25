@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fake="$FAKE_DIR"
+printf 'docker %s\n' "$*" >> "$fake/calls"
+
+case "$1" in
+  ps)
+    cat "$fake/stores"
+    ;;
+  inspect)
+    printf '%s\n' "$FAKE_IMAGE"
+    ;;
+  rm) ;;
+  run)
+    [ ! -e "$fake/run-fails" ]
+    ;;
+  exec)
+    shift
+    while [ "$1" = -i ] || [ "$1" = --user ]; do
+      if [ "$1" = -i ]; then
+        shift
+      else
+        shift 2
+      fi
+    done
+    container="$1"
+    shift
+    case "$1" in
+      pg_dumpall)
+        printf 'CREATE ROLE postgres;\nALTER ROLE postgres WITH SUPERUSER;\nCREATE ROLE app;\n'
+        ;;
+      pg_isready) ;;
+      pg_restore)
+        cat > "$fake/restored-$container.dump"
+        [ ! -e "$fake/restore-fails" ]
+        ;;
+      sh)
+        cat "$fake/counts-$container"
+        ;;
+      psql)
+        db=""
+        query=""
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            --dbname)
+              db="$2"
+              shift 2
+              ;;
+            -c)
+              query="$2"
+              shift 2
+              ;;
+            *) shift ;;
+          esac
+        done
+        if [ -n "$query" ]; then
+          case "$query" in
+            *pg_database*) cat "$fake/databases" ;;
+            *) cat "$fake/restored-counts" 2> /dev/null || cat "$fake/counts" ;;
+          esac
+        else
+          script="$(cat)"
+          case "$script" in
+            *pg_export_snapshot*)
+              printf '%s\n' "$script" > "$fake/script-$db"
+              printf 'PGDMP dump of %s\n' "$db"
+              cp "$fake/counts" "$fake/counts-$container"
+              ;;
+            *) printf '%s\n' "$script" > "$fake/globals-$container" ;;
+          esac
+        fi
+        ;;
+    esac
+    ;;
+esac

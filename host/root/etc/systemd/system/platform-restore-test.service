@@ -1,0 +1,9 @@
+[Unit]
+Description=Restores each product's newest dump into a throwaway PostgreSQL and compares its rows
+Requires=docker.service
+After=docker.service
+RequiresMountsFor=/srv/data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/platform-backup restore-test

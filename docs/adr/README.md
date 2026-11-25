@@ -35,3 +35,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0023](0023-the-host-is-rebuilt-on-purpose-by-raising-its-generation.md)               | The host is rebuilt on purpose by raising its generation                   | 2026-11-24 | accepted |
 | [0024](0024-database-dumps-are-locked-for-30-days-and-nobody-can-lift-the-lock.md)     | Database dumps are locked for 30 days, and nobody can lift the lock        | 2026-11-25 | accepted |
 | [0025](0025-data-lifecycle-manager-snapshots-the-data-disk-every-day.md)               | Data Lifecycle Manager snapshots the data disk every day                   | 2026-11-25 | accepted |
+| [0026](0026-the-monthly-restore-test-runs-on-the-host.md)                              | The monthly restore test runs on the host                                  | 2026-11-25 | accepted |
