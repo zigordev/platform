@@ -85,13 +85,13 @@ The three mounts let the agent read the machine's numbers. It runs as a user tha
 
 ### Dashboards and alert rules
 
-`zigordev-stack up` ends by pushing seven files to the local Grafana, with gcx: one folder, two dashboards and four alert rules. A second push changes nothing.
+`zigordev-stack up` ends by pushing nine files to the local Grafana, with gcx: one folder, two dashboards and six alert rules. A second push changes nothing.
 
-| In Grafana                              | What it shows                                                                                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dashboards, folder `zigordev`, App      | One app, picked from a list: whether it reports, its version, its requests, the share that fail, its response times, its events and its errors |
-| Dashboards, folder `zigordev`, Platform | The machine's processor, memory and disks, the requests at the ingress, and who is reporting                                                   |
-| Alerting, four rules                    | [The runbooks](../docs/runbooks/README.md) list them. On the laptop they show in Grafana and notify nobody                                     |
+| In Grafana                              | What it shows                                                                                                                                                   |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboards, folder `zigordev`, App      | One app, picked from a list: whether it reports, its version, its requests, the share that fail, its response times, its events and its errors                  |
+| Dashboards, folder `zigordev`, Platform | The machine's processor, memory and disks, the requests at the ingress, who is reporting, and how old each product's newest dump and last good restore test are |
+| Alerting, six rules                     | [The runbooks](../docs/runbooks/README.md) list them. On the laptop they show in Grafana and notify nobody                                                      |
 
 A new app needs no entry anywhere. It appears in the list of the App dashboard with its first request, and every rule covers it.
 
