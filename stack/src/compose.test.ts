@@ -496,12 +496,26 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
     const lines = String(job?.environment?.KAFKA_SETUP ?? '')
       .split('\n')
       .filter((line) => line !== '');
-    expect(lines).toEqual([
+    expect(lines.slice(0, 4)).toEqual([
       'user notifications-api',
       'allow notifications-api Read topic notifications.requests. prefixed',
       'allow notifications-api Write topic notifications.outcomes. prefixed',
       'allow notifications-api Read group notifications-api. prefixed',
     ]);
+  });
+
+  it("gives every broker the template's four topics, because notifications reads every producer's topic wherever it runs", () => {
+    const lines = String(job?.environment?.KAFKA_SETUP ?? '')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines.slice(4)).toEqual([
+      'topic notifications.requests.template-api 1',
+      'topic notifications.requests.template-api.dead-letter 1',
+      'topic notifications.outcomes.template-api 1',
+      'topic notifications.outcomes.template-api.dead-letter 1',
+      'allow notifications-api Write topic notifications.requests.template-api.dead-letter',
+    ]);
+    expect(lines.filter((line) => /^(user|allow) template-api\b/.test(line))).toEqual([]);
   });
 
   it("reads the notifications service's password in production from the service's own parameter, so it lives once", () => {
@@ -517,22 +531,17 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
     }
   });
 
-  it("gives the laptop the template's user, with its topics, rules and throwaway passwords", () => {
+  it("gives only the laptop the template's user, with its rules and throwaway passwords", () => {
     const settings = withSetup.services['kafka-setup']?.environment ?? {};
     const lines = String(settings.KAFKA_SETUP_LAPTOP ?? '')
       .split('\n')
       .filter((line) => line !== '');
     expect(lines).toEqual([
       'user template-api',
-      'topic notifications.requests.template-api 1',
-      'topic notifications.requests.template-api.dead-letter 1',
-      'topic notifications.outcomes.template-api 1',
-      'topic notifications.outcomes.template-api.dead-letter 1',
       'allow template-api Write topic notifications.requests.template-api',
       'allow template-api Read topic notifications.outcomes.template-api',
       'allow template-api Write topic notifications.outcomes.template-api.dead-letter',
       'allow template-api Read group template-api. prefixed',
-      'allow notifications-api Write topic notifications.requests.template-api.dead-letter',
     ]);
     expect(settings.KAFKA_PASSWORD_NOTIFICATIONS_API).toBe('local-only-notifications-api');
     expect(settings.KAFKA_PASSWORD_TEMPLATE_API).toBe('local-only-template-api');

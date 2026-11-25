@@ -416,6 +416,11 @@ services:
         allow notifications-api Read topic notifications.requests. prefixed
         allow notifications-api Write topic notifications.outcomes. prefixed
         allow notifications-api Read group notifications-api. prefixed
+        topic notifications.requests.template-api 1
+        topic notifications.requests.template-api.dead-letter 1
+        topic notifications.outcomes.template-api 1
+        topic notifications.outcomes.template-api.dead-letter 1
+        allow notifications-api Write topic notifications.requests.template-api.dead-letter
     tmpfs:
       - /tmp
       - /opt/kafka/logs:uid=1000,gid=1000
