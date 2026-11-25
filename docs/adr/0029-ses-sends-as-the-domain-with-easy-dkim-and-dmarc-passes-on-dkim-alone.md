@@ -1,6 +1,6 @@
 # 0029. SES sends as the domain with Easy DKIM, and DMARC passes on DKIM alone
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-25
 - Supersedes: none
 
