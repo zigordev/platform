@@ -478,6 +478,12 @@ An app's own Kafka user joins the list `KAFKA_SETUP` with its topics and rules. 
 aws ssm put-parameter --profile platform-ops --region eu-west-1 --type SecureString --name /notifications/KAFKA_PASSWORD --value "$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)"
 ```
 
+And for the playground's API, which the product reads as `KAFKA_PASSWORD` too:
+
+```bash
+aws ssm put-parameter --profile platform-ops --region eu-west-1 --type SecureString --name /playground/KAFKA_PASSWORD --value "$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-48)"
+```
+
 They take no image of ours, so the command carries no images, and each outside image is pinned by its digest. A merge that changes nothing in `stack/` deploys them again too, and compose leaves every unchanged container as it is.
 
 ### What a product's compose files must hold

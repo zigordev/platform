@@ -525,7 +525,7 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
     const lines = String(job?.environment?.KAFKA_SETUP ?? '')
       .split('\n')
       .filter((line) => line !== '');
-    expect(lines.slice(4)).toEqual([
+    expect(lines.slice(4, 9)).toEqual([
       'topic notifications.requests.template-api 1',
       'topic notifications.requests.template-api.dead-letter 1',
       'topic notifications.outcomes.template-api 1',
@@ -535,11 +535,36 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
     expect(lines.filter((line) => /^(user|allow) template-api\b/.test(line))).toEqual([]);
   });
 
+  it("gives every broker the playground API's four topics, its user and its rules, because the playground runs in production", () => {
+    const lines = String(job?.environment?.KAFKA_SETUP ?? '')
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines.slice(9)).toEqual([
+      'topic notifications.requests.playground-api 1',
+      'topic notifications.requests.playground-api.dead-letter 1',
+      'topic notifications.outcomes.playground-api 1',
+      'topic notifications.outcomes.playground-api.dead-letter 1',
+      'allow notifications-api Write topic notifications.requests.playground-api.dead-letter',
+      'user playground-api',
+      'allow playground-api Write topic notifications.requests.playground-api',
+      'allow playground-api Read topic notifications.outcomes.playground-api',
+      'allow playground-api Write topic notifications.outcomes.playground-api.dead-letter',
+      'allow playground-api Read group playground-api. prefixed',
+    ]);
+  });
+
   it("reads the notifications service's password in production from the service's own parameter, so it lives once", () => {
     expect(productionText).toContain(
       'KAFKA_PASSWORD_NOTIFICATIONS_API: ${KAFKA_PASSWORD_NOTIFICATIONS_API}'
     );
     expect(secretLines).toContain('KAFKA_PASSWORD_NOTIFICATIONS_API=/notifications/KAFKA_PASSWORD');
+  });
+
+  it("reads the playground API's password in production from the playground's own parameter, so it lives once", () => {
+    expect(productionText).toContain(
+      'KAFKA_PASSWORD_PLAYGROUND_API: ${KAFKA_PASSWORD_PLAYGROUND_API}'
+    );
+    expect(secretLines).toContain('KAFKA_PASSWORD_PLAYGROUND_API=/playground/KAFKA_PASSWORD');
   });
 
   it("names in .env.production.example only secrets, each empty or one product's Kafka password", () => {
@@ -561,6 +586,7 @@ describe("the job that sets up Kafka's topics, users and rules", () => {
       'allow template-api Read group template-api. prefixed',
     ]);
     expect(settings.KAFKA_PASSWORD_NOTIFICATIONS_API).toBe('local-only-notifications-api');
+    expect(settings.KAFKA_PASSWORD_PLAYGROUND_API).toBe('local-only-playground-api');
     expect(settings.KAFKA_PASSWORD_TEMPLATE_API).toBe('local-only-template-api');
   });
 });

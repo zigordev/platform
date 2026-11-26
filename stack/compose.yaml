@@ -421,6 +421,16 @@ services:
         topic notifications.outcomes.template-api 1
         topic notifications.outcomes.template-api.dead-letter 1
         allow notifications-api Write topic notifications.requests.template-api.dead-letter
+        topic notifications.requests.playground-api 1
+        topic notifications.requests.playground-api.dead-letter 1
+        topic notifications.outcomes.playground-api 1
+        topic notifications.outcomes.playground-api.dead-letter 1
+        allow notifications-api Write topic notifications.requests.playground-api.dead-letter
+        user playground-api
+        allow playground-api Write topic notifications.requests.playground-api
+        allow playground-api Read topic notifications.outcomes.playground-api
+        allow playground-api Write topic notifications.outcomes.playground-api.dead-letter
+        allow playground-api Read group playground-api. prefixed
     tmpfs:
       - /tmp
       - /opt/kafka/logs:uid=1000,gid=1000

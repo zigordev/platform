@@ -52,6 +52,7 @@ services:
         allow template-api Write topic notifications.outcomes.template-api.dead-letter
         allow template-api Read group template-api. prefixed
       KAFKA_PASSWORD_NOTIFICATIONS_API: local-only-notifications-api
+      KAFKA_PASSWORD_PLAYGROUND_API: local-only-playground-api
       KAFKA_PASSWORD_TEMPLATE_API: local-only-template-api
 
   lgtm:
