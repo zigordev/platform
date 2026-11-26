@@ -7,9 +7,17 @@ mock_provider "aws" {
 
   mock_resource "aws_sesv2_email_identity" {
     defaults = {
+      arn = "arn:aws:ses:eu-west-1:000000000000:identity/zigordev.com"
       dkim_signing_attributes = {
         tokens = ["firsttoken", "secondtoken", "thirdtoken"]
       }
+    }
+  }
+
+  mock_resource "aws_iam_access_key" {
+    defaults = {
+      id                   = "not-a-real-key-id"
+      ses_smtp_password_v4 = "not a real password"
     }
   }
 }
@@ -49,7 +57,7 @@ run "the_domain_is_an_ses_identity_that_ses_signs_with_its_own_2048_bit_key" {
 
   assert {
     condition     = local.region == "eu-west-1"
-    error_message = "The identity lives in eu-west-1, where the notifications service sends through SES's SMTP endpoint."
+    error_message = "The identity lives in eu-west-1, where the notifications service sends through SES's SMTP endpoint, and where the provider can make an SMTP password."
   }
 }
 
@@ -85,6 +93,61 @@ run "every_dkim_key_gets_a_dns_only_cname_named_after_its_token" {
       record.type == "CNAME" && !record.proxied
     ])
     error_message = "The records are CNAMEs that Cloudflare answers as they are, never proxied, so receivers reach SES's keys."
+  }
+}
+
+run "the_mail_user_may_only_send_raw_email_as_the_domain" {
+  command = plan
+
+  assert {
+    condition     = aws_iam_user.smtp.name == "notifications-smtp"
+    error_message = "The mail password belongs to one IAM user, named after the service that signs in with it."
+  }
+
+  assert {
+    condition = jsondecode(aws_iam_user_policy.smtp.policy).Statement == [
+      {
+        Effect   = "Allow"
+        Action   = "ses:SendRawEmail"
+        Resource = "arn:aws:ses:eu-west-1:000000000000:identity/zigordev.com"
+      },
+    ]
+    error_message = "The user may do one thing: ses:SendRawEmail, the action behind SES's SMTP endpoint, as the identity zigordev.com."
+  }
+
+  assert {
+    condition     = aws_iam_access_key.smtp.user == "notifications-smtp"
+    error_message = "The code makes the user's one key, so nobody makes it by hand."
+  }
+
+  assert {
+    condition     = terraform_data.smtp_rotation.input == 1
+    error_message = "The key is in its first generation. Raising local.smtp.rotation replaces it."
+  }
+}
+
+run "the_service_finds_its_smtp_user_and_password_in_its_own_parameters" {
+  command = plan
+
+  assert {
+    condition = { for name, parameter in aws_ssm_parameter.smtp : name => parameter.name } == {
+      NOTIFICATIONS_API_SMTP_USER     = "/notifications/NOTIFICATIONS_API_SMTP_USER"
+      NOTIFICATIONS_API_SMTP_PASSWORD = "/notifications/NOTIFICATIONS_API_SMTP_PASSWORD"
+    }
+    error_message = "The two values sit under /notifications/, with the names that notifications' .env.production.example gives."
+  }
+
+  assert {
+    condition     = alltrue([for parameter in aws_ssm_parameter.smtp : parameter.type == "SecureString"])
+    error_message = "Both values are SecureStrings, so Parameter Store keeps them encrypted."
+  }
+
+  assert {
+    condition = (
+      nonsensitive(aws_ssm_parameter.smtp["NOTIFICATIONS_API_SMTP_USER"].value) == "not-a-real-key-id" &&
+      nonsensitive(aws_ssm_parameter.smtp["NOTIFICATIONS_API_SMTP_PASSWORD"].value) == "not a real password"
+    )
+    error_message = "The user is the key's id, and the password is the SMTP password the provider makes from the key's secret."
   }
 }
 

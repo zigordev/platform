@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const script = fileURLToPath(new URL('../infra/run.sh', import.meta.url));
 const account = '111122223333';
+const key = 'AKIAIOSFODNN7EXAMPLE';
 
 const fakeTofu = `#!/usr/bin/env bash
 dir="\${1#-chdir=}"
@@ -38,11 +39,12 @@ case "$command" in
     exit "\${!var:-0}"
     ;;
   show)
-    echo "the plan of $stack in account ${account}"
+    echo "the plan of $stack in account ${account} with the key ${key}"
     ;;
   apply)
     echo "apply $stack" >> "$FAKE_LOG"
     echo "$*" >> "$FAKE_APPLY_ARGS"
+    echo "applied $stack in account ${account} with the key ${key}"
     ;;
 esac
 `;
@@ -160,6 +162,12 @@ describe('infra/run.sh plan', () => {
     expect(result.summary).not.toContain(account);
   });
 
+  it('hides access key ids in the summary, because AWS tells anyone the account of a key id', () => {
+    const result = run('plan', { FAKE_HOST: '2' });
+    expect(result.summary).toContain('with the key <access key>');
+    expect(result.summary).not.toContain(key);
+  });
+
   it('fails when a plan fails, and names the stack', () => {
     const result = run('plan', { FAKE_HOST: '1' });
     expect(result.code).toBe(1);
@@ -231,6 +239,13 @@ describe('infra/run.sh apply', () => {
     expect(args).toHaveLength(1);
     expect(args[0]?.split(' ')).toContain('-lock-timeout=120s');
     expect(args[0]).not.toContain('-lock=false');
+  });
+
+  it('hides the account number and access key ids in its log, which a public repo shows to anyone', () => {
+    const result = run('apply');
+    expect(result.stdout).toContain('applied host in account <account> with the key <access key>');
+    expect(result.stdout).not.toContain(account);
+    expect(result.stdout).not.toContain(key);
   });
 });
 

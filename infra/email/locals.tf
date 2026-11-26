@@ -15,4 +15,10 @@ locals {
     records    = 3
     zone       = "dkim.amazonses.com"
   }
+
+  smtp = {
+    user     = "notifications-smtp"
+    product  = "notifications"
+    rotation = 1
+  }
 }
