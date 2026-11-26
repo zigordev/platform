@@ -135,7 +135,7 @@ services:
     networks: [zigordev]
 
   notifications-api:
-    image: ghcr.io/zigordev/notifications-api:282146ba160fce8374cf3b827b475229522e7f59@sha256:eb4fef5f7f72a7dae9f18bb931050080ee02c52f9a194ff453929590ada09d74
+    image: ghcr.io/zigordev/notifications-api:main@sha256:ccc88fdd3c4469660a16034d40bf84f0c61c4dcac29f5009153e553feb25c140
     profiles: [notifications]
     restart: unless-stopped
     user: "1000:1000"
@@ -149,7 +149,7 @@ services:
     environment:
       PORT: "3000"
       OTEL_SERVICE_NAME: notifications-api
-      OTEL_SERVICE_VERSION: 282146ba160fce8374cf3b827b475229522e7f59
+      OTEL_SERVICE_VERSION: main
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=local
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
       DATABASE_URL: postgresql://notifications_api:local-only@notifications-postgres:5432/notifications_api
@@ -174,7 +174,7 @@ services:
     networks: [zigordev, notifications]
 
   notifications-api-migrate:
-    image: ghcr.io/zigordev/notifications-api:282146ba160fce8374cf3b827b475229522e7f59@sha256:eb4fef5f7f72a7dae9f18bb931050080ee02c52f9a194ff453929590ada09d74
+    image: ghcr.io/zigordev/notifications-api:main@sha256:ccc88fdd3c4469660a16034d40bf84f0c61c4dcac29f5009153e553feb25c140
     profiles: [notifications]
     command: [node, src/migrate.ts]
     restart: "no"
@@ -188,7 +188,7 @@ services:
     cpus: 1
     environment:
       OTEL_SERVICE_NAME: notifications-api-migrate
-      OTEL_SERVICE_VERSION: 282146ba160fce8374cf3b827b475229522e7f59
+      OTEL_SERVICE_VERSION: main
       DATABASE_URL: postgresql://notifications_api:local-only@notifications-postgres:5432/notifications_api
       DATABASE_ADMIN_URL: postgresql://postgres:local-only@notifications-postgres:5432/postgres
     labels:
