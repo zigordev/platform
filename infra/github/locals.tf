@@ -30,7 +30,7 @@ locals {
     }
     notifications = {
       description = "The email service of every zigordev product, and its client package"
-      deploys     = false
+      deploys     = true
     }
   }
 

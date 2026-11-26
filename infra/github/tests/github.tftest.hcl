@@ -140,8 +140,8 @@ run "a_repo_that_deploys_does_so_from_main_only_through_the_environment_producti
   command = plan
 
   assert {
-    condition     = toset(keys(github_repository_environment.production)) == toset(["platform", "playground"])
-    error_message = "Only a repo that deploys has the environment production: platform for the shared services, and the playground."
+    condition     = toset(keys(github_repository_environment.production)) == toset(["platform", "playground", "notifications"])
+    error_message = "Only a repo that deploys has the environment production: platform for the shared services, the playground and notifications."
   }
 
   assert {
