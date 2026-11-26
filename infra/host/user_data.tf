@@ -1,5 +1,5 @@
 locals {
-  host_files  = sort(tolist(fileset(local.host_files_root, "**")))
+  host_files  = sort([for file in fileset(local.host_files_root, "**") : file if !startswith(basename(file), ".")])
   data_device = "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(aws_ebs_volume.data.id, "-", "")}"
 
   cloud_config = {
