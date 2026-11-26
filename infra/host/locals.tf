@@ -27,5 +27,5 @@ locals {
     device  = "/dev/sdf"
   }
 
-  host_files_root = "${path.module}/../../host/root"
+  host_files_root = coalesce(var.host_files_root, "${path.module}/../../host/root")
 }

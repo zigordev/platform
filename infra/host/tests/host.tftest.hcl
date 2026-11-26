@@ -221,3 +221,16 @@ run "a_first_boot_that_missed_its_setup_is_repaired_through_systems_manager" {
     error_message = "The document runs the script under sh without its first line, and stops at the first error."
   }
 }
+
+run "a_hidden_file_such_as_the_one_finder_leaves_never_reaches_the_host" {
+  command = plan
+
+  variables {
+    host_files_root = "tests/fixtures/hidden"
+  }
+
+  assert {
+    condition     = local.host_files == tolist(["etc/platform/generation"])
+    error_message = "A hidden file, such as the .DS_Store that Finder leaves, is left out, and the file beside it is kept."
+  }
+}
