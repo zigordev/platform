@@ -170,6 +170,7 @@ run "the_host_reads_only_what_each_target_names_and_keeps_the_records" {
       "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/KAFKA_ADMIN_PASSWORD",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/platform/KAFKA_SETUP_PASSWORD",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/notifications/KAFKA_PASSWORD",
+      "arn:aws:ssm:eu-west-1:123456789012:parameter/playground/KAFKA_PASSWORD",
       "arn:aws:ssm:eu-west-1:123456789012:parameter/shop/*",
     ])
     error_message = "The host reads the shared services' secrets by name, never all of /platform, the one Kafka password of each app they name, and each product's own path."
