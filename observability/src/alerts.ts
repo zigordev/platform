@@ -1,13 +1,15 @@
 import {
   appPanels,
   brokerAnswers,
+  freeLimitsInUse,
   lastRestoreTestAge,
   mailServerAnswers,
   newestDumpAge,
   outsideChecksPass,
   platformPanels,
+  usagePanels,
 } from './dashboards.ts';
-import type { Alert } from './resources.ts';
+import { type Alert, usageUid } from './resources.ts';
 
 const apps = 'service_name!="traefik"';
 const requests = 'http_server_request_duration_seconds_count';
@@ -17,6 +19,7 @@ const consumer = 'service_name, messaging_destination_name, messaging_consumer_g
 export const slowestAllowed = 1;
 export const oldestDumpAllowed = 2 * 60 * 60;
 export const oldestRestoreTestAllowed = 35 * 24 * 60 * 60;
+export const freeLimitShareAllowed = 0.8;
 
 function failing(answers: string): string {
   return `(1 - ${answers}) > 0`;
@@ -189,5 +192,22 @@ export const alerts: readonly Alert[] = [
     runbook: 'app-cannot-be-reached-from-outside.md',
     dashboard: 'platform',
     panel: platformPanels.outsideChecks,
+  },
+];
+
+export const cloudAlerts: readonly Alert[] = [
+  {
+    uid: 'free-limit-is-near',
+    title: 'A free limit is near',
+    summary:
+      "More than 80% of Grafana Cloud's free {{ $labels.limit }} is in use, so new data may soon be dropped",
+    expr: `(${freeLimitsInUse}) > ${freeLimitShareAllowed}`,
+    lookBack: '10m',
+    for: '0s',
+    reaches: 'email',
+    runbook: 'free-limit-is-near.md',
+    dashboard: 'usage',
+    panel: usagePanels.overTime,
+    datasource: usageUid,
   },
 ];

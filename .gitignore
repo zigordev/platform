@@ -4,6 +4,7 @@ dist/
 coverage/
 *.tsbuildinfo
 stack/observability/
+observability/cloud/
 .terraform/
 *.tfstate
 *.tfstate.*

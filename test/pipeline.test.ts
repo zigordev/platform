@@ -217,6 +217,13 @@ describe('the push of dashboards and alerts to Grafana Cloud', () => {
     expect(decide).toContain('changed="the files of the commit before could not be built"\n');
   });
 
+  it("compares the files only Grafana Cloud gets too, and builds each side from nothing, so one side never keeps the other's files", () => {
+    expect(decide).toContain('rm -rf observability/cloud &&\n');
+    expect(decide).toContain(
+      'if [ -d observability/cloud ]; then cp -R observability/cloud "$1/cloud"; fi\n'
+    );
+  });
+
   it('waits for the owner in the environment that the apply role trusts, after the gate and the apply', () => {
     expect(push).toContain('environment: infrastructure\n');
     expect(push).toContain('needs: [check, infra-apply, observability-changes]\n');

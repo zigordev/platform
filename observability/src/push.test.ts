@@ -1,4 +1,13 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +17,7 @@ import {
   type Fetch,
   type Gcx,
   type GcxResult,
+  gather,
   gcxImage,
   type Item,
   listed,
@@ -63,7 +73,14 @@ afterEach(() => {
 });
 
 function files(...manifests: { kind: string; metadata: { name: string } }[]): string {
-  const folder = join(work, 'observability');
+  return filesIn('observability', ...manifests);
+}
+
+function filesIn(
+  name: string,
+  ...manifests: { kind: string; metadata: { name: string } }[]
+): string {
+  const folder = join(work, name);
   mkdirSync(folder, { recursive: true });
   for (const entry of manifests) {
     writeFileSync(join(folder, `${entry.kind}-${entry.metadata.name}.json`), JSON.stringify(entry));
@@ -71,6 +88,31 @@ function files(...manifests: { kind: string; metadata: { name: string } }[]): st
   writeFileSync(join(folder, 'notes.txt'), 'not a manifest');
   return folder;
 }
+
+describe('gather', () => {
+  it('copies the files of every folder into one, and leaves out what is not a file to push', () => {
+    const everywhere = filesIn('observability', manifest('Dashboard', 'app', 'zigordev'));
+    const cloud = filesIn('cloud', manifest('AlertRule', 'free-limit-is-near', 'zigordev'));
+    const into = join(work, 'together');
+    mkdirSync(into);
+    expect(gather([everywhere, cloud], into)).toBeUndefined();
+    expect(readdirSync(into).sort()).toEqual([
+      'AlertRule-free-limit-is-near.json',
+      'Dashboard-app.json',
+    ]);
+    expect(readFileSync(join(into, 'Dashboard-app.json'), 'utf8')).toBe(
+      readFileSync(join(everywhere, 'Dashboard-app.json'), 'utf8')
+    );
+  });
+
+  it('names a file that two folders hold, because one would hide the other', () => {
+    const everywhere = filesIn('observability', manifest('Dashboard', 'app', 'zigordev'));
+    const cloud = filesIn('cloud', manifest('Dashboard', 'app', 'zigordev'));
+    const into = join(work, 'together');
+    mkdirSync(into);
+    expect(gather([everywhere, cloud], into)).toBe('Dashboard-app.json');
+  });
+});
 
 describe('stale', () => {
   const local: Item[] = [
@@ -441,6 +483,52 @@ describe('run', () => {
     );
     expect(code).toBe(0);
     expect(given).toBe(folder);
+  });
+
+  it('pushes the files of several folders as one, from a folder of its own that it removes afterwards', async () => {
+    const everywhere = filesIn('observability', manifest('Dashboard', 'app', 'zigordev'));
+    const cloud = filesIn('cloud', manifest('AlertRule', 'free-limit-is-near', 'zigordev'));
+    const { output, out } = capture();
+    let given = '';
+    let held: string[] = [];
+    const code = await run(
+      [everywhere, cloud],
+      env,
+      output,
+      (target) => {
+        given = target;
+        held = readdirSync(target).sort();
+        return () => ok(listing());
+      },
+      ready
+    );
+    expect(code).toBe(0);
+    expect(given).not.toBe(everywhere);
+    expect(held).toEqual(['AlertRule-free-limit-is-near.json', 'Dashboard-app.json']);
+    expect(out.join('')).toContain('push: pushed 2 files');
+    expect(existsSync(given)).toBe(false);
+  });
+
+  it('pushes nothing when two folders hold the same file, and says which', async () => {
+    const everywhere = filesIn('observability', manifest('Dashboard', 'app', 'zigordev'));
+    const cloud = filesIn('cloud', manifest('Dashboard', 'app', 'zigordev'));
+    const { output, err } = capture();
+    let called = false;
+    const code = await run(
+      [everywhere, cloud],
+      env,
+      output,
+      () => {
+        called = true;
+        return () => ok(listing());
+      },
+      ready
+    );
+    expect(code).toBe(2);
+    expect(called).toBe(false);
+    expect(err.join('')).toContain(
+      'push: two folders hold Dashboard-app.json, so nothing was pushed'
+    );
   });
 
   it("asks Grafana's health page through fetch by itself before it pushes", async () => {
