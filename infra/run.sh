@@ -19,9 +19,9 @@ laptop_only="bootstrap"
 
 hide() {
   if [ -n "${AWS_ACCOUNT_ID:-}" ]; then
-    sed "s/${AWS_ACCOUNT_ID}/<account>/g"
+    sed -E -e "s/${AWS_ACCOUNT_ID}/<account>/g" -e 's/AKIA[A-Z0-9]{16}/<access key>/g'
   else
-    cat
+    sed -E 's/AKIA[A-Z0-9]{16}/<access key>/g'
   fi
 }
 

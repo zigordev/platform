@@ -140,12 +140,12 @@ Measured against AWS's own price list for Ireland on 2026-11-23:
 
 Every stack in `infra/` is code, and every change to it is a pull request. Nothing in AWS, GitHub or another provider is changed by hand. The script `infra/run.sh` does the work in all three places below, so each one plans the same way.
 
-| When                      | What happens                                                                                                                                                                                 | Who acts                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| A pull request            | The job "Infrastructure plan" signs in with the read-only role and plans every stack. The run's summary holds each plan, with the account number hidden. A plan that fails turns `check` red | Nobody. The owner reads the plan in the summary                                          |
-| A merge to `main`         | The plan runs again. When a stack that the pipeline applies has changes, the job "Infrastructure apply" waits in the environment `infrastructure`                                            | The owner approves the run in GitHub: the run's page, then "Review deployments"          |
-| The approval              | The job signs in with the apply role, for one hour at most, and applies every changed stack                                                                                                  | Nobody                                                                                   |
-| Every Monday at 06:17 UTC | The workflow "Drift" plans every stack, the bootstrap included. When any stack differs from its code, the run fails, and GitHub emails the owner                                             | The owner reads the summary, then undoes the hand-made change or writes it into the code |
+| When                      | What happens                                                                                                                                                                                                       | Who acts                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| A pull request            | The job "Infrastructure plan" signs in with the read-only role and plans every stack. The run's summary holds each plan, with the account number and any access key id hidden. A plan that fails turns `check` red | Nobody. The owner reads the plan in the summary                                          |
+| A merge to `main`         | The plan runs again. When a stack that the pipeline applies has changes, the job "Infrastructure apply" waits in the environment `infrastructure`                                                                  | The owner approves the run in GitHub: the run's page, then "Review deployments"          |
+| The approval              | The job signs in with the apply role, for one hour at most, and applies every changed stack                                                                                                                        | Nobody                                                                                   |
+| Every Monday at 06:17 UTC | The workflow "Drift" plans every stack, the bootstrap included. When any stack differs from its code, the run fails, and GitHub emails the owner                                                                   | The owner reads the summary, then undoes the hand-made change or writes it into the code |
 
 Runs on `main` go one at a time: the workflow's concurrency group holds a later run until the earlier one ends. So a run that waits for the owner's approval holds back every later merge. Only one run waits behind it: a newer merge replaces the older run that has not started yet, and the newer run's plan holds both changes, because its commit holds both.
 
@@ -298,14 +298,16 @@ Nothing. The free plan holds the DNS, the proxy with its certificate, the tunnel
 
 ## Email
 
-The notifications service sends every product's mail through AWS SES in eu-west-1. This repo holds SES's side in the stack `infra/email`, from step 5.4 of the build plan. [Record 0029](adr/0029-ses-sends-as-the-domain-with-easy-dkim-and-dmarc-passes-on-dkim-alone.md) says why it is shaped this way.
+The notifications service sends every product's mail through AWS SES in eu-west-1. This repo holds SES's side in the stack `infra/email`, from step 5.4 of the build plan. [Record 0029](adr/0029-ses-sends-as-the-domain-with-easy-dkim-and-dmarc-passes-on-dkim-alone.md) says why it is shaped this way, and [record 0030](adr/0030-the-code-makes-the-notifications-services-mail-password.md) why the code makes the mail password.
 
 ### What the email stack holds
 
-| Part                               | What it is                                                                                                                                                                                |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The domain identity `zigordev.com` | Once it is verified, SES may send from any address at `zigordev.com`. SES makes a 2048-bit key for it, Easy DKIM, keeps the private half, and signs every message as `zigordev.com`       |
-| Three DKIM records                 | `<token>._domainkey.zigordev.com` in Cloudflare, each a CNAME to `<token>.dkim.amazonses.com` that Cloudflare does not proxy. SES gives the three tokens, and finds the records by itself |
+| Part                               | What it is                                                                                                                                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The domain identity `zigordev.com` | Once it is verified, SES may send from any address at `zigordev.com`. SES makes a 2048-bit key for it, Easy DKIM, keeps the private half, and signs every message as `zigordev.com`                  |
+| Three DKIM records                 | `<token>._domainkey.zigordev.com` in Cloudflare, each a CNAME to `<token>.dkim.amazonses.com` that Cloudflare does not proxy. SES gives the three tokens, and finds the records by itself            |
+| The IAM user `notifications-smtp`  | It may only call `ses:SendRawEmail`, the action behind SES's SMTP endpoint, as the identity `zigordev.com`. The code makes its one access key                                                        |
+| Two parameters                     | `/notifications/NOTIFICATIONS_API_SMTP_USER` and `/notifications/NOTIFICATIONS_API_SMTP_PASSWORD`: the notifications service's sign-in to SES's SMTP endpoint, as SecureStrings that the code writes |
 
 Every From address is at `zigordev.com` itself, such as `no-reply@zigordev.com`, never at a subdomain, because DMARC asks for strict alignment. SES sends with its own envelope domain, so SPF of the apex stays `v=spf1 -all`, and DMARC passes on DKIM.
 
@@ -324,9 +326,28 @@ Every From address is at `zigordev.com` itself, such as `no-reply@zigordev.com`,
 
 3. The owner asks AWS again for production access, in the Support Center, on the case AWS opened on 2026-11-25. A session never files or answers it. Until AWS agrees, SES sends only to addresses verified in it: its sandbox.
 
+### The mail password
+
+The stack makes the IAM user `notifications-smtp` and its one access key. From that key it writes the two SecureStrings that the notifications service reads when it deploys:
+
+- `/notifications/NOTIFICATIONS_API_SMTP_USER` holds the key's id.
+- `/notifications/NOTIFICATIONS_API_SMTP_PASSWORD` holds SES's SMTP password, which the provider makes from the key's secret.
+
+Nobody stores them by hand. This shows that both exist, without reading their values:
+
+```bash
+aws ssm describe-parameters --profile platform-ops --region eu-west-1 --parameter-filters Key=Path,Values=/notifications --query 'Parameters[].Name'
+```
+
+A new password follows a leak, or any moment when someone may have seen the values. Raise `local.smtp.rotation` in `infra/email/locals.tf`, in a pull request. Its apply makes the new key first, writes the new values, and then deletes the old key, so the user never holds more than the two keys AWS allows. The notifications service reads the values when it deploys, so its mail fails from the apply until its next deploy.
+
+The pipeline's logs hide every access key id, as they hide the account number: AWS's `GetAccessKeyInfo` tells any AWS caller which account a key id belongs to.
+
 ### What SES costs
 
 The pricing page names no charge for an identity or for DKIM. Each message costs money. AWS's page says new SES accounts start on the Essentials plan since 2026-07-21: $0.16 per 1,000 messages, with no monthly fee. A la carte it is $0.10 per 1,000. Attachments add $0.12 per GB. SES has no free allowance of its own; new AWS accounts get up to $200 of credits. Checked on AWS's pricing page on 2026-11-25.
+
+The mail password costs nothing. IAM is offered at no additional charge, and so are standard parameters in Parameter Store. The first paid step there, an advanced parameter, costs $0.05 a month each, and these two do not need it. Checked on AWS's pages on 2026-11-25.
 
 ## Grafana Cloud
 
