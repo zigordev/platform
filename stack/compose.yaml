@@ -187,6 +187,32 @@ services:
           }
         }
 
+        faro.receiver "browsers" {
+          extra_log_labels = { source = "browser", app_name = "", kind = "" }
+
+          server {
+            listen_address           = "0.0.0.0"
+            listen_port              = 12347
+            max_allowed_payload_size = "1MiB"
+
+            rate_limiting {
+              enabled    = true
+              strategy   = "per_app"
+              rate       = 50
+              burst_size = 100
+            }
+          }
+
+          sourcemaps {
+            download = false
+          }
+
+          output {
+            logs   = [loki.write.destination.receiver]
+            traces = [otelcol.processor.batch.apps.input]
+          }
+        }
+
         prometheus.exporter.self "alloy" { }
 
         prometheus.exporter.unix "host" {
@@ -272,6 +298,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.rum.rule: Path(`/rum`)
+      traefik.http.routers.rum.priority: "1000"
+      traefik.http.routers.rum.service: rum
+      traefik.http.routers.rum.middlewares: rum-limit,rum-path
+      traefik.http.middlewares.rum-limit.ratelimit.average: "10"
+      traefik.http.middlewares.rum-limit.ratelimit.burst: "50"
+      traefik.http.middlewares.rum-limit.ratelimit.sourcecriterion.requestheadername: CF-Connecting-IP
+      traefik.http.middlewares.rum-path.replacepath.path: /collect
+      traefik.http.services.rum.loadbalancer.server.port: "12347"
     depends_on:
       docker-proxy:
         condition: service_healthy

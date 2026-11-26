@@ -27,6 +27,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.routers.alloy.rule: Host(`alloy.localhost`)
+      traefik.http.routers.alloy.service: alloy
       traefik.http.services.alloy.loadbalancer.server.port: "12345"
 
   kafka:

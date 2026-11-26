@@ -147,6 +147,21 @@ Traefik takes all its settings from variables, so its own health check reads the
 
 Traefik warns once at each start that it "can reject some encoded characters in the request path". That is a notice about a setting we leave as it is.
 
+### Browser monitoring
+
+A web app's pages send what Grafana Faro measures in the browser, through toolkit's `@zigordev/rum`, to the path `/rum` on the app's own address. So the page's content security policy needs no other origin, as toolkit's record 0055 says. The shared services take that path on every address, the laptop's and production's, without a line per product:
+
+| Part                               | What it does                                                                                                                                                                                                                             |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Traefik's route `rum`              | Takes ``Path(`/rum`)`` on every address, with priority 1000, ahead of every product's own route                                                                                                                                          |
+| The middleware `rum-limit`         | Lets each visitor send 10 requests a second, with a burst of 50. In production it tells visitors apart by `CF-Connecting-IP`, which Cloudflare sets. On the laptop that header is missing, so every request shares one limit             |
+| The middleware `rum-path`          | Hands the request to the path `/collect`, where the receiver listens                                                                                                                                                                     |
+| Alloy's `faro.receiver "browsers"` | Listens on port 12347, takes at most 1 MiB a request, and limits each app to 50 requests a second, with bursts of up to 100. It never downloads a source map from an address that a page sends, so nobody can make the agent fetch a URL |
+
+The receiver sends the browser's lines to Loki and its traces to the same destination as the apps' own traces. Each line carries the labels `source="browser"`, `app_name`, such as `playground-web`, and `kind`: `log`, `exception`, `measurement` or `event`. So `{source="browser", app_name="playground-web"}` in Grafana's Explore shows one app's browser lines, apart from its server's. Its traces carry the app's name as their service, and continue in the API through the `traceparent` header.
+
+Nothing personal leaves the browser: `@zigordev/rum` drops queries, users and console lines before it sends, as its README says. A product turns browser monitoring on by setting `RUM_URL` to `/rum` in its compose files, and the template does that once this route is in production.
+
 ### The broker
 
 Kafka carries the events that one service sends to another. It is one node, broker and controller at once, so it keeps one copy of each message. Its data sits in the volume `kafka-data`, which in production is on the data disk, inside the disk's daily snapshot.

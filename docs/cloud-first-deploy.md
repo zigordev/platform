@@ -395,6 +395,8 @@ To see what a push would do without changing anything, build the files and run g
 
 Nothing. Grafana's free plan holds 10,000 metric series, 50 GB of logs and 50 GB of traces a month, kept 14 days, 3 users, 100,000 runs of the outside checks a month, and its phone alerts for 3 users. Grafana's page says "No charges ever".
 
+What browsers send to `/rum` on a product's address goes to the same logs and traces, so it counts against the same free 50 GB of each. The shared services limit each visitor to 10 requests a second, and each app to 50, as `stack/README.md` says.
+
 ## Deploys
 
 A deploy runs one commit of one target on the host. A target is the shared services, named `platform`, or a product whose entry in `infra/products.json` names its repo. Deploys are step 3.7 of the build plan. The target's own pipeline starts one on `main`, through the deploy workflow that `toolkit` holds, and this repo holds the host's side and the access. [Record 0019](adr/0019-a-deploy-is-one-command-per-target-and-the-host-checks-what-it-runs.md) says why it works this way.
