@@ -2,7 +2,9 @@ import {
   appPanels,
   brokerAnswers,
   lastRestoreTestAge,
+  mailServerAnswers,
   newestDumpAge,
+  outsideChecksPass,
   platformPanels,
 } from './dashboards.ts';
 import type { Alert } from './resources.ts';
@@ -15,6 +17,10 @@ const consumer = 'service_name, messaging_destination_name, messaging_consumer_g
 export const slowestAllowed = 1;
 export const oldestDumpAllowed = 2 * 60 * 60;
 export const oldestRestoreTestAllowed = 35 * 24 * 60 * 60;
+
+function failing(answers: string): string {
+  return `(1 - ${answers}) > 0`;
+}
 
 export const alerts: readonly Alert[] = [
   {
@@ -98,7 +104,7 @@ export const alerts: readonly Alert[] = [
     title: 'The Kafka broker is down',
     summary:
       'The Kafka broker has not answered on its port for 5 minutes, so no app can send or read events',
-    expr: `(${brokerAnswers}) < 1`,
+    expr: failing(brokerAnswers),
     lookBack: '10m',
     for: '5m',
     reaches: 'phone',
@@ -131,5 +137,57 @@ export const alerts: readonly Alert[] = [
     runbook: 'message-reached-dead-letter-topic.md',
     dashboard: 'app',
     panel: appPanels.setAside,
+  },
+  {
+    uid: 'email-failed-for-good',
+    title: 'An email failed for good',
+    summary:
+      'An email that {{ $labels.producer }} asked {{ $labels.service_name }} to send has failed for good, so its recipient will not get it',
+    expr: 'sum by (service_name, producer) (increase(notifications_email_deliveries_total{outcome="failed"}[10m])) > 0',
+    lookBack: '10m',
+    for: '0s',
+    reaches: 'email',
+    runbook: 'email-failed-for-good.md',
+    dashboard: 'platform',
+    panel: platformPanels.emailsEnded,
+  },
+  {
+    uid: 'jobs-are-waiting',
+    title: 'Jobs are waiting',
+    summary:
+      '{{ $labels.service_name }} has had jobs ready to start on its queue {{ $labels.messaging_destination_name }} for 15 minutes, so their work is late',
+    expr: 'max by (service_name, messaging_destination_name) (pgboss_queue_jobs{pgboss_job_state="ready"}) > 0',
+    lookBack: '10m',
+    for: '15m',
+    reaches: 'phone',
+    runbook: 'jobs-are-waiting.md',
+    dashboard: 'app',
+    panel: appPanels.jobsReady,
+  },
+  {
+    uid: 'mail-server-cannot-be-reached',
+    title: 'The mail server cannot be reached',
+    summary:
+      '{{ $labels.service_name }} has failed to reach its mail server, or to sign in to it, for 10 minutes, so it holds every email until it can',
+    expr: failing(mailServerAnswers),
+    lookBack: '10m',
+    for: '10m',
+    reaches: 'email',
+    runbook: 'mail-server-cannot-be-reached.md',
+    dashboard: 'platform',
+    panel: platformPanels.mailServerAnswers,
+  },
+  {
+    uid: 'app-cannot-be-reached-from-outside',
+    title: 'An app cannot be reached from outside',
+    summary:
+      'The latest outside check of {{ $labels.product }} has failed from every place for 5 minutes, so its visitors likely cannot reach it either',
+    expr: failing(outsideChecksPass),
+    lookBack: '10m',
+    for: '5m',
+    reaches: 'phone',
+    runbook: 'app-cannot-be-reached-from-outside.md',
+    dashboard: 'platform',
+    panel: platformPanels.outsideChecks,
   },
 ];

@@ -80,6 +80,10 @@ describe.each([
       'messaging_destination_name',
       'messaging_consumer_group_name',
       'zigordev_events_reason',
+      'producer',
+      'outcome',
+      'product',
+      'probe',
     ];
     for (const query of queries(model)) {
       for (const label of grouped(query)) {
@@ -108,8 +112,15 @@ describe('the app dashboard', () => {
     }
   });
 
-  it('shows what the plan asks for: whether it is up, its version, requests, failures, response times, events, errors and messages', () => {
-    expect(rows(app)).toEqual(['Now', 'Requests', 'Response times', 'Logs and events', 'Messages']);
+  it('shows what the plan asks for: whether it is up, its version, requests, failures, response times, events, errors, messages and jobs', () => {
+    expect(rows(app)).toEqual([
+      'Now',
+      'Requests',
+      'Response times',
+      'Logs and events',
+      'Messages',
+      'Jobs',
+    ]);
     expect(panels(app).map((panel) => panel.title)).toEqual([
       'Copies reporting',
       'Version',
@@ -125,7 +136,14 @@ describe('the app dashboard', () => {
       'Errors and warnings',
       'Messages waiting, by topic',
       'Messages set aside, by topic',
+      'Jobs ready to start, by queue',
     ]);
+  });
+
+  it("shows the app's jobs that are ready to start, from pg-boss's own count", () => {
+    expect(question(app, appPanels.jobsReady)).toBe(
+      'max by (messaging_destination_name) (pgboss_queue_jobs{service_name="$app", pgboss_job_state="ready"})'
+    );
   });
 
   it("shows the app's waiting and set-aside messages from the numbers @zigordev/events reports", () => {
@@ -153,8 +171,31 @@ describe('the platform dashboard', () => {
     expect(platform.templating?.list ?? []).toEqual([]);
   });
 
-  it('shows the machine, the ingress, the telemetry itself, the backups and the broker', () => {
-    expect(rows(platform)).toEqual(['The machine', 'The ingress', 'Telemetry', 'Backups', 'Kafka']);
+  it('shows the machine, the ingress, the telemetry itself, the backups, the broker, the email service and the checks from outside', () => {
+    expect(rows(platform)).toEqual([
+      'The machine',
+      'The ingress',
+      'Telemetry',
+      'Backups',
+      'Kafka',
+      'Email',
+      'From outside',
+    ]);
+  });
+
+  it('shows the emails that ended and whether the mail server answers, from the numbers of the notifications service', () => {
+    expect(question(platform, platformPanels.emailsEnded)).toBe(
+      'sum by (producer, outcome) (increase(notifications_email_deliveries_total[$__rate_interval]))'
+    );
+    expect(question(platform, platformPanels.mailServerAnswers)).toBe(
+      'max by (service_name) (notifications_provider_up)'
+    );
+  });
+
+  it("shows each outside check of each live product, by place, and leaves out the agent's check of the broker", () => {
+    expect(question(platform, platformPanels.outsideChecks)).toBe(
+      'max by (product, probe) (probe_success{product!=""})'
+    );
   });
 
   it("shows whether the broker answers, from the agent's check of its port", () => {
