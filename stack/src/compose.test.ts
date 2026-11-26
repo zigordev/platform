@@ -371,6 +371,66 @@ describe('the telemetry agent', () => {
   });
 });
 
+describe('browser monitoring', () => {
+  const config = laptop.services.alloy?.environment?.ALLOY_CONFIG ?? '';
+  const labels = everywhere.services.alloy?.labels ?? {};
+
+  it("receives what Faro sends from every product's pages, and passes it on with the agent's own logs and traces", () => {
+    expect(config).toContain('faro.receiver "browsers" {');
+    expect(config).toContain('listen_address           = "0.0.0.0"');
+    expect(config).toContain('listen_port              = 12347');
+    expect(config).toContain('logs   = [loki.write.destination.receiver]');
+    expect(config).toContain('traces = [otelcol.processor.batch.apps.input]');
+  });
+
+  it('names each browser line by the app that sent it and its kind, so they are found apart from the server lines', () => {
+    expect(config).toContain('extra_log_labels = { source = "browser", app_name = "", kind = "" }');
+  });
+
+  it('keeps a public endpoint small: 1 MiB a request, a limit for each app, and no source map fetched from an address a visitor sends', () => {
+    expect(config).toContain('max_allowed_payload_size = "1MiB"');
+    expect(config).toContain('enabled    = true');
+    expect(config).toContain('strategy   = "per_app"');
+    expect(config).toContain('download = false');
+  });
+
+  it("routes /rum on every product's address to the receiver, ahead of the product's own routes", () => {
+    expect(labels).toEqual(
+      expect.objectContaining({
+        'traefik.enable': 'true',
+        'traefik.http.routers.rum.rule': 'Path(`/rum`)',
+        'traefik.http.routers.rum.priority': '1000',
+        'traefik.http.routers.rum.service': 'rum',
+        'traefik.http.routers.rum.middlewares': 'rum-limit,rum-path',
+        'traefik.http.middlewares.rum-path.replacepath.path': '/collect',
+        'traefik.http.services.rum.loadbalancer.server.port': '12347',
+      })
+    );
+  });
+
+  it('limits each visitor, by the address that Cloudflare names, to 10 requests a second with a burst of 50', () => {
+    expect(labels).toEqual(
+      expect.objectContaining({
+        'traefik.http.middlewares.rum-limit.ratelimit.average': '10',
+        'traefik.http.middlewares.rum-limit.ratelimit.burst': '50',
+        'traefik.http.middlewares.rum-limit.ratelimit.sourcecriterion.requestheadername':
+          'CF-Connecting-IP',
+      })
+    );
+  });
+
+  it("keeps the route to the agent's own pages, on the laptop only, beside it", () => {
+    expect(laptop.services.alloy?.labels).toEqual(
+      expect.objectContaining({
+        'traefik.http.routers.alloy.rule': 'Host(`alloy.localhost`)',
+        'traefik.http.routers.alloy.service': 'alloy',
+        'traefik.http.services.alloy.loadbalancer.server.port': '12345',
+      })
+    );
+    expect(labels['traefik.http.routers.alloy.rule']).toBeUndefined();
+  });
+});
+
 describe('the Kafka broker', () => {
   const broker = everywhere.services.kafka;
   const settings = broker?.environment ?? {};
@@ -725,7 +785,7 @@ describe('what only the laptop has', () => {
     expect(text).not.toContain('"published"');
   });
 
-  it('gives a local address to each service that has a page', () => {
+  it('gives a local address to each service that has a page, beside the path /rum that every address shares', () => {
     const rules = services.flatMap(([, service]) =>
       Object.entries(service.labels ?? {})
         .filter(([label]) => label.endsWith('.rule'))
@@ -736,6 +796,7 @@ describe('what only the laptop has', () => {
       'Host(`grafana.localhost`)',
       'Host(`mail.localhost`)',
       'Host(`traefik.localhost`)',
+      'Path(`/rum`)',
     ]);
   });
 
