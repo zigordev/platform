@@ -22,7 +22,9 @@ const fakes: Record<string, string> = {
   blkid: 'echo "blkid $*" >> "$FAKE_LOG"\nexit "$FAKE_BLKID_EXIT"\n',
   'mkfs.ext4': 'echo "mkfs.ext4 $*" >> "$FAKE_LOG"\n',
   mount: 'echo "mount $1" >> "$FAKE_LOG"\n',
-  umount: 'echo "umount" >> "$FAKE_LOG"\nrm -rf "$1/docker-volumes"\n',
+  umount:
+    'echo "umount with $(ls -A "$1" | tr \'\\n\' \' \')" >> "$FAKE_LOG"\nrm -rf "$1/docker-volumes" "$1/containerd"\n',
+  resize2fs: 'echo "resize2fs $*" >> "$FAKE_LOG"\n',
   udevadm: 'echo "udevadm $*" >> "$FAKE_LOG"\n',
   sleep: ':\n',
 };
@@ -76,15 +78,21 @@ afterEach(() => {
 });
 
 describe('platform-data-disk', () => {
-  it('leaves a disk with a file system as it is, so a rebuilt host keeps its data', () => {
+  it('keeps a disk with a file system, so a rebuilt host keeps its data, and gives it the folders and the size it lacks', () => {
     writeFileSync(device, Buffer.alloc(1024 * 1024));
     const result = run({ FAKE_BLKID_EXIT: '0' });
     expect(result.code).toBe(0);
-    expect(result.calls).toEqual([`blkid -p ${device}`]);
+    expect(result.calls).toEqual([
+      `blkid -p ${device}`,
+      `mount ${device}`,
+      `resize2fs ${device}`,
+      'umount with containerd docker-volumes ',
+      'udevadm settle',
+    ]);
     expect(result.stdout).toContain('used as it is');
   });
 
-  it('gives a new, empty disk an ext4 file system with its label and the folder for the volumes', () => {
+  it('gives a new, empty disk an ext4 file system with its label and the folders for the volumes and the images', () => {
     writeFileSync(device, Buffer.alloc(1024 * 1024));
     const result = run({ FAKE_BLKID_EXIT: '2' });
     expect(result.code).toBe(0);
@@ -92,7 +100,8 @@ describe('platform-data-disk', () => {
       `blkid -p ${device}`,
       `mkfs.ext4 -q -L platform-data ${device}`,
       `mount ${device}`,
-      'umount',
+      `resize2fs ${device}`,
+      'umount with containerd docker-volumes ',
       'udevadm settle',
     ]);
   });

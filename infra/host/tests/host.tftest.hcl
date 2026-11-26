@@ -126,8 +126,8 @@ run "both_disks_are_encrypted_gp3_and_the_data_disk_sits_beside_the_host" {
   }
 
   assert {
-    condition     = aws_ebs_volume.data.type == "gp3" && aws_ebs_volume.data.encrypted && aws_ebs_volume.data.size == 10
-    error_message = "The data disk is an encrypted 10 GB gp3 disk."
+    condition     = aws_ebs_volume.data.type == "gp3" && aws_ebs_volume.data.encrypted && aws_ebs_volume.data.size == 20
+    error_message = "The data disk is an encrypted 20 GB gp3 disk."
   }
 
   assert {

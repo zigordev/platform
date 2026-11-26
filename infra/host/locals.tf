@@ -23,7 +23,7 @@ locals {
 
   data_disk = {
     name    = "platform-data"
-    size_gb = 10
+    size_gb = 20
     device  = "/dev/sdf"
   }
 

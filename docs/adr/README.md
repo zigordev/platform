@@ -40,3 +40,4 @@ To add one, use the `write-decision-record` skill, or copy [its template](../../
 | [0028](0028-the-shared-services-read-each-apps-kafka-password-from-the-apps-own-parameter.md)    | The shared services read each app's Kafka password from the app's own parameter    | 2026-11-25 | accepted |
 | [0029](0029-ses-sends-as-the-domain-with-easy-dkim-and-dmarc-passes-on-dkim-alone.md)            | SES sends as the domain with Easy DKIM, and DMARC passes on DKIM alone             | 2026-11-25 | accepted |
 | [0030](0030-the-code-makes-the-notifications-services-mail-password.md)                          | The code makes the notifications service's mail password                           | 2026-11-25 | accepted |
+| [0031](0031-a-rebuilt-host-keeps-its-images-and-brings-products-back-side-by-side.md)            | A rebuilt host keeps its images and brings products back side by side              | 2026-11-26 | accepted |

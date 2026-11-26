@@ -34,17 +34,18 @@ redeploy=""
 reported=""
 group=""
 rel=""
+line_prefix=""
 
 work="$(mktemp -d "$run_root/platform-deploy.XXXXXX")"
 export TMPDIR="$work"
 
 say() {
-  printf '%s\n' "$*"
+  printf '%s%s\n' "$line_prefix" "$*"
 }
 
 report() {
   reported="yes"
-  say "platform-deploy: $*"
+  printf 'platform-deploy: %s\n' "$*"
 }
 
 finish() {
@@ -77,7 +78,7 @@ step() {
   "$@" > "$work/step.log" 2>&1 || code=$?
   if [ "$code" -ne 0 ]; then
     say "  It failed with exit code $code. Its last lines:"
-    tail -n 40 "$work/step.log" | sed 's/^/    /'
+    tail -n 40 "$work/step.log" | sed "s/^/${line_prefix}    /"
   fi
   return "$code"
 }
@@ -594,42 +595,65 @@ redeploy_one() {
   report "result=redeployed target=$target commit=$commit"
 }
 
+bring_back() {
+  local record_name="$1" records_file="$2" value
+  set -e
+  target="${record_name##*/}"
+  work="$work/$target"
+  mkdir -p "$work"
+  export TMPDIR="$work"
+  value="$(jq -r --arg name "$record_name" '.Parameters[] | select(.Name == $name) | .Value' "$records_file")"
+  commit="$(field "$value" .commit)"
+  images="$(field "$value" .images)"
+  repo="$(field "$value" .repo)"
+  dir="$(field "$value" .dir)"
+  if ! valid "$name_pattern" "$target" || ! valid "$repo_pattern" "$repo" || ! valid "$dir_pattern" "$dir" ||
+    ! valid "$commit_pattern" "$commit" || ! valid_images "$images"; then
+    report "result=failed reason=bad-input target=$target commit=${commit:-none}"
+    exit 1
+  fi
+  take_lock "$target"
+  if [ -n "$(docker ps --all --quiet --filter "label=com.docker.compose.project=$target")" ]; then
+    report "result=skipped reason=present target=$target commit=$commit"
+    exit 0
+  fi
+  say "Bringing back $target at $commit"
+  redeploy_one
+}
+
 redeploy_recorded() {
-  local names record_name value failures=0 code
+  local names record_name failures=0 pids="" pid code
   read_socket_group
   aws_json ssm get-parameters-by-path --path "$records" > "$work/records.json" ||
     refuse unreachable "Parameter Store did not answer"
-  names="$(jq -r --arg first "$records/$shared_target" \
-    '.Parameters | sort_by(if .Name == $first then 0 else 1 end, .Name) | .[].Name' "$work/records.json")"
+  names="$(jq -r '.Parameters | sort_by(.Name) | .[].Name' "$work/records.json")"
   reported="yes"
   if [ -z "$names" ]; then
     say "platform-deploy: result=skipped reason=nothing-recorded target=none commit=none"
     exit 0
   fi
   for record_name in $names; do
-    target="${record_name##*/}"
-    value="$(jq -r --arg name "$record_name" '.Parameters[] | select(.Name == $name) | .Value' "$work/records.json")"
-    commit="$(field "$value" .commit)"
-    images="$(field "$value" .images)"
-    repo="$(field "$value" .repo)"
-    dir="$(field "$value" .dir)"
-    if ! valid "$name_pattern" "$target" || ! valid "$repo_pattern" "$repo" || ! valid "$dir_pattern" "$dir" ||
-      ! valid "$commit_pattern" "$commit" || ! valid_images "$images"; then
-      say "platform-deploy: result=failed reason=bad-input target=$target commit=${commit:-none}"
-      failures=$((failures + 1))
-      continue
+    if [ "${record_name##*/}" = "$shared_target" ]; then
+      set +e
+      (bring_back "$record_name" "$work/records.json")
+      code=$?
+      set -e
+      if [ "$code" -ne 0 ]; then
+        failures=$((failures + 1))
+      fi
     fi
-    take_lock "$target"
-    if [ -n "$(docker ps --all --quiet --filter "label=com.docker.compose.project=$target")" ]; then
-      say "platform-deploy: result=skipped reason=present target=$target commit=$commit"
-      continue
+  done
+  for record_name in $names; do
+    if [ "${record_name##*/}" != "$shared_target" ]; then
+      (
+        line_prefix="${record_name##*/}: "
+        bring_back "$record_name" "$work/records.json"
+      ) &
+      pids="$pids $!"
     fi
-    say "Bringing back $target at $commit"
-    set +e
-    (redeploy_one)
-    code=$?
-    set -e
-    if [ "$code" -ne 0 ]; then
+  done
+  for pid in $pids; do
+    if ! wait "$pid"; then
       failures=$((failures + 1))
     fi
   done
