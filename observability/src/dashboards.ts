@@ -24,6 +24,7 @@ export const appPanels = {
   problems: 12,
   waiting: 13,
   setAside: 14,
+  jobsReady: 15,
 } as const;
 
 export const platformPanels = {
@@ -41,6 +42,9 @@ export const platformPanels = {
   dumpAge: 12,
   restoreTestAge: 13,
   brokerAnswers: 14,
+  emailsEnded: 15,
+  mailServerAnswers: 16,
+  outsideChecks: 17,
 } as const;
 
 export const newestDumpAge =
@@ -48,6 +52,8 @@ export const newestDumpAge =
 export const lastRestoreTestAge =
   'time() - max by (compose_project) (platform_restore_test_last_success_timestamp_seconds)';
 export const brokerAnswers = 'max(probe_success{job="kafka"})';
+export const mailServerAnswers = 'max by (service_name) (notifications_provider_up)';
+export const outsideChecksPass = 'max by (product) (probe_success{product!=""})';
 
 const one = 'service_name="$app"';
 const requests = `http_server_request_duration_seconds_count{${one}`;
@@ -163,6 +169,17 @@ export function appRows(): Row[] {
         ]),
       ],
     },
+    {
+      title: 'Jobs',
+      panels: [
+        overTime(appPanels.jobsReady, 'Jobs ready to start, by queue', 'short', [
+          {
+            expr: `max by (messaging_destination_name) (pgboss_queue_jobs{${one}, pgboss_job_state="ready"})`,
+            legend: '{{messaging_destination_name}}',
+          },
+        ]),
+      ],
+    },
   ];
 }
 
@@ -262,6 +279,36 @@ export function platformRows(): Row[] {
         overTime(platformPanels.brokerAnswers, 'The broker answers on its port', 'short', [
           { expr: brokerAnswers, legend: 'kafka' },
         ]),
+      ],
+    },
+    {
+      title: 'Email',
+      panels: [
+        overTime(platformPanels.emailsEnded, 'Emails that ended, by app and outcome', 'short', [
+          {
+            expr: 'sum by (producer, outcome) (increase(notifications_email_deliveries_total[$__rate_interval]))',
+            legend: '{{producer}}, {{outcome}}',
+          },
+        ]),
+        overTime(platformPanels.mailServerAnswers, 'The mail server answers', 'short', [
+          { expr: mailServerAnswers, legend: '{{service_name}}' },
+        ]),
+      ],
+    },
+    {
+      title: 'From outside',
+      panels: [
+        overTime(
+          platformPanels.outsideChecks,
+          'Outside checks that pass, by product and place',
+          'short',
+          [
+            {
+              expr: 'max by (product, probe) (probe_success{product!=""})',
+              legend: '{{product}} from {{probe}}',
+            },
+          ]
+        ),
       ],
     },
   ];

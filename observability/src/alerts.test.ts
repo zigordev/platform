@@ -1,10 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { alerts, oldestDumpAllowed, oldestRestoreTestAllowed, slowestAllowed } from './alerts.ts';
 import { appPanels, platformPanels } from './dashboards.ts';
 
 const runbookFolder = fileURLToPath(new URL('../../docs/runbooks/', import.meta.url));
+const outsideChecks = fileURLToPath(new URL('../../infra/grafana/checks.tf', import.meta.url));
 
 function alert(uid: string) {
   const found = alerts.find((candidate) => candidate.uid === uid);
@@ -15,7 +16,7 @@ function alert(uid: string) {
 }
 
 describe('the alerts', () => {
-  it('are nine, each with a name of its own', () => {
+  it('are thirteen, each with a name of its own', () => {
     expect(alerts.map((one) => one.uid)).toEqual([
       'app-answers-with-errors',
       'app-is-slow',
@@ -26,9 +27,23 @@ describe('the alerts', () => {
       'kafka-broker-is-down',
       'messages-are-stuck',
       'message-reached-dead-letter-topic',
+      'email-failed-for-good',
+      'jobs-are-waiting',
+      'mail-server-cannot-be-reached',
+      'app-cannot-be-reached-from-outside',
     ]);
     expect(new Set(alerts.map((one) => one.title)).size).toBe(alerts.length);
   });
+
+  it.each(alerts)(
+    '$uid answers with a number above 0 while it fires, as its threshold needs',
+    (one) => {
+      const answersAboveZero = /> \d+(\.\d+)?\)?$/.test(one.expr);
+      const answersOne = one.expr.startsWith('absent_over_time(');
+      expect(answersAboveZero || answersOne, one.expr).toBe(true);
+      expect(one.expr).not.toMatch(/ < \d/);
+    }
+  );
 
   it.each(alerts)('$uid has a runbook that exists', (one) => {
     expect(one.runbook).toBe(`${one.uid}.md`);
@@ -139,8 +154,8 @@ describe('telemetry that went silent', () => {
 describe('a Kafka broker that is down', () => {
   const one = alert('kafka-broker-is-down');
 
-  it("means the agent's check of the broker's port has failed for 5 minutes", () => {
-    expect(one.expr).toBe('(max(probe_success{job="kafka"})) < 1');
+  it("means the agent's check of the broker's port has failed for 5 minutes, answered as 1", () => {
+    expect(one.expr).toBe('(1 - max(probe_success{job="kafka"})) > 0');
     expect(one.for).toBe('5m');
   });
 
@@ -178,5 +193,64 @@ describe('a message that reached a dead-letter topic', () => {
     );
     expect(one.for).toBe('0s');
     expect(one.summary).toContain('{{ $labels.zigordev_events_reason }}');
+  });
+});
+
+describe('an email that failed for good', () => {
+  const one = alert('email-failed-for-good');
+
+  it('fires at once for every email that the notifications service ended as failed, by its own count', () => {
+    expect(one.expr).toBe(
+      'sum by (service_name, producer) (increase(notifications_email_deliveries_total{outcome="failed"}[10m])) > 0'
+    );
+    expect(one.for).toBe('0s');
+    expect(one.reaches).toBe('email');
+  });
+
+  it('names the app that asked for the email', () => {
+    expect(one.summary).toContain('{{ $labels.producer }}');
+  });
+});
+
+describe('jobs that are waiting', () => {
+  const one = alert('jobs-are-waiting');
+
+  it("means a queue has had jobs ready to start for 15 minutes, by pg-boss's own count, in every app", () => {
+    expect(one.expr).toBe(
+      'max by (service_name, messaging_destination_name) (pgboss_queue_jobs{pgboss_job_state="ready"}) > 0'
+    );
+    expect(one.for).toBe('15m');
+    expect(one.reaches).toBe('phone');
+  });
+
+  it('names the app and the queue', () => {
+    expect(one.summary).toContain('{{ $labels.service_name }}');
+    expect(one.summary).toContain('{{ $labels.messaging_destination_name }}');
+  });
+});
+
+describe('a mail server that cannot be reached', () => {
+  const one = alert('mail-server-cannot-be-reached');
+
+  it("means the notifications service's own check of its mail server has failed for 10 minutes", () => {
+    expect(one.expr).toBe('(1 - max by (service_name) (notifications_provider_up)) > 0');
+    expect(one.for).toBe('10m');
+    expect(one.reaches).toBe('email');
+  });
+});
+
+describe('an app that cannot be reached from outside', () => {
+  const one = alert('app-cannot-be-reached-from-outside');
+
+  it('means the latest outside check of a product failed from every place, for 5 minutes', () => {
+    expect(one.expr).toBe('(1 - max by (product) (probe_success{product!=""})) > 0');
+    expect(one.for).toBe('5m');
+    expect(one.reaches).toBe('phone');
+    expect(one.summary).toContain('{{ $labels.product }}');
+  });
+
+  it('reads only the outside checks, whose label product infra/grafana sets, and not the check of the broker', () => {
+    expect(readFileSync(outsideChecks, 'utf8')).toMatch(/labels = \{\s*product = each\.key\s*\}/);
+    expect(one.expr).not.toContain('job="kafka"');
   });
 });
