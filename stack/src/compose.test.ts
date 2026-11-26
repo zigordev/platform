@@ -617,14 +617,13 @@ describe('notifications on the laptop', () => {
   const api = withMail.services['notifications-api'];
   const migrate = withMail.services['notifications-api-migrate'];
   const database = withMail.services['notifications-postgres'];
-  const pin = /^ghcr\.io\/zigordev\/notifications-api:([0-9a-f]{40})@sha256:[0-9a-f]{64}$/;
+  const pin = /^ghcr\.io\/zigordev\/notifications-api:main@sha256:[0-9a-f]{64}$/;
 
-  it('runs the image that notifications published, pinned to its commit and its digest', () => {
-    const commit = pin.exec(api?.image ?? '')?.[1];
-    expect(commit).toBeDefined();
+  it("follows notifications' tag main, pinned with its digest, so that Renovate proposes each new image", () => {
+    expect(api?.image).toMatch(pin);
     expect(migrate?.image).toBe(api?.image);
-    expect(api?.environment?.OTEL_SERVICE_VERSION).toBe(commit);
-    expect(migrate?.environment?.OTEL_SERVICE_VERSION).toBe(commit);
+    expect(api?.environment?.OTEL_SERVICE_VERSION).toBe('main');
+    expect(migrate?.environment?.OTEL_SERVICE_VERSION).toBe('main');
     expect(database?.image).toMatch(/^postgres:\d+\.\d+-alpine[\d.]+@sha256:[0-9a-f]{64}$/);
   });
 
