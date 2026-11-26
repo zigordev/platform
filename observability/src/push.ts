@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Output } from './build.ts';
 import { folderUid } from './resources.ts';
@@ -172,6 +173,20 @@ export async function awake(
   return false;
 }
 
+export function gather(folders: readonly string[], into: string): string | undefined {
+  const taken = new Set<string>();
+  for (const folder of folders) {
+    for (const file of readdirSync(folder).filter((name) => name.endsWith('.json'))) {
+      if (taken.has(file)) {
+        return file;
+      }
+      taken.add(file);
+      copyFileSync(join(folder, file), join(into, file));
+    }
+  }
+  return undefined;
+}
+
 export async function run(
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
@@ -179,9 +194,9 @@ export async function run(
   gcxFor: (folder: string) => Gcx,
   wake: (server: string) => Promise<boolean> = (server) => awake(server, output)
 ): Promise<number> {
-  const [folder, ...rest] = args;
-  if (folder === undefined || rest.length > 0) {
-    output.err('Usage: node src/push-main.ts <folder>\n');
+  const [folder, ...more] = args;
+  if (folder === undefined) {
+    output.err('Usage: node src/push-main.ts <folder> [<folder>...]\n');
     return 2;
   }
   const missing = ['GRAFANA_SERVER', 'GRAFANA_TOKEN'].filter((name) => !env[name]);
@@ -192,5 +207,18 @@ export async function run(
   if (!(await wake(env.GRAFANA_SERVER ?? ''))) {
     return 1;
   }
-  return push(folder, gcxFor(folder), output);
+  if (more.length === 0) {
+    return push(folder, gcxFor(folder), output);
+  }
+  const together = mkdtempSync(join(tmpdir(), 'zigordev-push-'));
+  try {
+    const twice = gather(args, together);
+    if (twice !== undefined) {
+      output.err(`push: two folders hold ${twice}, so nothing was pushed\n`);
+      return 2;
+    }
+    return push(together, gcxFor(together), output);
+  } finally {
+    rmSync(together, { recursive: true, force: true });
+  }
 }

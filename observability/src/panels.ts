@@ -6,7 +6,7 @@ import * as loki from '@grafana/grafana-foundation-sdk/loki';
 import * as prometheus from '@grafana/grafana-foundation-sdk/prometheus';
 import * as stat from '@grafana/grafana-foundation-sdk/stat';
 import * as timeseries from '@grafana/grafana-foundation-sdk/timeseries';
-import { lokiUid, prometheusUid } from './resources.ts';
+import { lokiUid, prometheusUid, usageUid } from './resources.ts';
 
 export type Panel = cog.Builder<dashboard.Panel>;
 
@@ -15,18 +15,30 @@ export interface Query {
   readonly legend: string;
 }
 
-const metrics = { type: 'prometheus', uid: prometheusUid };
-const lines = { type: 'loki', uid: lokiUid };
+export interface Source {
+  readonly type: string;
+  readonly uid: string;
+}
+
+export const metrics: Source = { type: 'prometheus', uid: prometheusUid };
+export const usage: Source = { type: 'prometheus', uid: usageUid };
+const lines: Source = { type: 'loki', uid: lokiUid };
 
 function refId(index: number): string {
   return String.fromCharCode(65 + index);
 }
 
-export function number(id: number, title: string, unit: string, expr: string): Panel {
+export function number(
+  id: number,
+  title: string,
+  unit: string,
+  expr: string,
+  source: Source = metrics
+): Panel {
   return new stat.PanelBuilder()
     .id(id)
     .title(title)
-    .datasource(metrics)
+    .datasource(source)
     .unit(unit)
     .height(4)
     .span(6)
@@ -50,12 +62,13 @@ export function overTime(
   id: number,
   title: string,
   unit: string,
-  queries: readonly Query[]
+  queries: readonly Query[],
+  source: Source = metrics
 ): Panel {
   const panel = new timeseries.PanelBuilder()
     .id(id)
     .title(title)
-    .datasource(metrics)
+    .datasource(source)
     .unit(unit)
     .height(8)
     .span(12);

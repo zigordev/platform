@@ -1,6 +1,14 @@
 import type * as dashboard from '@grafana/grafana-foundation-sdk/dashboard';
 import { describe, expect, it } from 'vitest';
-import { appDashboard, appPanels, platformDashboard, platformPanels } from './dashboards.ts';
+import {
+  appDashboard,
+  appPanels,
+  freeLimits,
+  platformDashboard,
+  platformPanels,
+  usageDashboard,
+  usagePanels,
+} from './dashboards.ts';
 
 interface Target {
   readonly expr?: string;
@@ -35,10 +43,12 @@ function grouped(query: string): string[] {
 
 const app = appDashboard();
 const platform = platformDashboard();
+const usage = usageDashboard();
 
 describe.each([
   ['app', app, appPanels],
   ['platform', platform, platformPanels],
+  ['usage', usage, usagePanels],
 ] as const)('the %s dashboard', (uid, model, ids) => {
   it('has a fixed name in Grafana, so a link to it never breaks', () => {
     expect(model.uid).toBe(uid);
@@ -217,5 +227,38 @@ describe('the platform dashboard', () => {
     expect(question(platform, platformPanels.diskOverTime)).toBe(
       '1 - max by (device) (node_filesystem_avail_bytes) / max by (device) (node_filesystem_size_bytes)'
     );
+  });
+});
+
+describe('the usage dashboard', () => {
+  it("is named Free limits, and every panel reads Grafana Cloud's usage numbers, so only Grafana Cloud gets it", () => {
+    expect(usage.title).toBe('Free limits');
+    for (const panel of panels(usage)) {
+      expect(panel.datasource).toEqual({ type: 'prometheus', uid: 'grafanacloud-usage' });
+    }
+  });
+
+  it('shows the share in use of each free limit now, and all of them over time', () => {
+    expect(rows(usage)).toEqual(['Share in use', 'Over time']);
+    expect(freeLimits.map((limit) => limit.panel)).toEqual([
+      usagePanels.metricsSeries,
+      usagePanels.logs,
+      usagePanels.traces,
+      usagePanels.profiles,
+      usagePanels.outsideChecks,
+      usagePanels.users,
+    ]);
+    for (const limit of freeLimits) {
+      expect(question(usage, limit.panel)).toBe(`max(${limit.used}) / max(${limit.included})`);
+    }
+    const overTime = panels(usage).find((panel) => panel.id === usagePanels.overTime);
+    expect(overTime?.targets).toHaveLength(freeLimits.length);
+  });
+
+  it('divides the use by the amount Grafana Cloud says is included, so a change of plan needs no change here', () => {
+    for (const limit of freeLimits) {
+      expect(limit.used).toMatch(/^grafanacloud_org_/);
+      expect(limit.included).toMatch(/^grafanacloud_org_\w*included\w*$/);
+    }
   });
 });

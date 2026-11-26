@@ -6,6 +6,7 @@ export type Manifest = resource.Manifest;
 export const folderUid = 'zigordev';
 export const prometheusUid = 'prometheus';
 export const lokiUid = 'loki';
+export const usageUid = 'grafanacloud-usage';
 export const runbooks = 'https://github.com/zigordev/platform/blob/main/docs/runbooks';
 
 function plain<T>(value: T): T {
@@ -48,6 +49,7 @@ export interface Alert {
   readonly runbook: string;
   readonly dashboard: string;
   readonly panel: number;
+  readonly datasource?: string;
 }
 
 export function alertManifest(alert: Alert): Manifest {
@@ -70,7 +72,7 @@ export function alertManifest(alert: Alert): Manifest {
       },
       expressions: {
         A: {
-          datasourceUID: prometheusUid,
+          datasourceUID: alert.datasource ?? prometheusUid,
           relativeTimeRange: { from: alert.lookBack, to: '0s' },
           model: { refId: 'A', expr: alert.expr, instant: true },
         },

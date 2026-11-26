@@ -1,5 +1,5 @@
 import * as dashboard from '@grafana/grafana-foundation-sdk/dashboard';
-import { linesOverTime, logLines, name, number, overTime, type Panel } from './panels.ts';
+import { linesOverTime, logLines, name, number, overTime, type Panel, usage } from './panels.ts';
 import { prometheusUid } from './resources.ts';
 
 export interface Row {
@@ -46,6 +46,77 @@ export const platformPanels = {
   mailServerAnswers: 16,
   outsideChecks: 17,
 } as const;
+
+export const usagePanels = {
+  metricsSeries: 1,
+  logs: 2,
+  traces: 3,
+  profiles: 4,
+  outsideChecks: 5,
+  users: 6,
+  overTime: 7,
+} as const;
+
+export interface FreeLimit {
+  readonly name: string;
+  readonly title: string;
+  readonly panel: number;
+  readonly used: string;
+  readonly included: string;
+}
+
+export const freeLimits: readonly FreeLimit[] = [
+  {
+    name: 'metrics series',
+    title: 'Metrics series',
+    panel: usagePanels.metricsSeries,
+    used: 'grafanacloud_org_metrics_billable_series',
+    included: 'grafanacloud_org_metrics_included_series',
+  },
+  {
+    name: 'logs',
+    title: 'Logs, this month',
+    panel: usagePanels.logs,
+    used: 'grafanacloud_org_logs_usage',
+    included: 'grafanacloud_org_logs_included_usage',
+  },
+  {
+    name: 'traces',
+    title: 'Traces, this month',
+    panel: usagePanels.traces,
+    used: 'grafanacloud_org_traces_usage',
+    included: 'grafanacloud_org_traces_included_usage',
+  },
+  {
+    name: 'profiles',
+    title: 'Profiles, this month',
+    panel: usagePanels.profiles,
+    used: 'grafanacloud_org_profiles_usage',
+    included: 'grafanacloud_org_profiles_included_usage',
+  },
+  {
+    name: 'outside check runs',
+    title: 'Outside check runs, this month',
+    panel: usagePanels.outsideChecks,
+    used: 'grafanacloud_org_sm_billable_check_executions',
+    included: 'grafanacloud_org_sm_included_check_executions',
+  },
+  {
+    name: 'users',
+    title: 'Users',
+    panel: usagePanels.users,
+    used: 'grafanacloud_org_grafana_billable_users',
+    included: 'grafanacloud_org_grafana_included_users',
+  },
+];
+
+export function shareInUse(limit: FreeLimit): string {
+  return `max(${limit.used}) / max(${limit.included})`;
+}
+
+export const freeLimitsInUse = freeLimits
+  .map((limit) => `label_replace(${shareInUse(limit)}, "limit", "${limit.name}", "", "")`)
+  .join(' or ');
 
 export const newestDumpAge =
   'time() - max by (compose_project) (platform_backup_last_success_timestamp_seconds)';
@@ -331,6 +402,29 @@ function build(uid: string, title: string, rows: readonly Row[]): dashboard.Dash
   return builder;
 }
 
+export function usageRows(): Row[] {
+  return [
+    {
+      title: 'Share in use',
+      panels: freeLimits.map((limit) =>
+        number(limit.panel, limit.title, 'percentunit', shareInUse(limit), usage)
+      ),
+    },
+    {
+      title: 'Over time',
+      panels: [
+        overTime(
+          usagePanels.overTime,
+          'Share of each free limit in use',
+          'percentunit',
+          freeLimits.map((limit) => ({ expr: shareInUse(limit), legend: limit.name })),
+          usage
+        ),
+      ],
+    },
+  ];
+}
+
 export function appDashboard(): dashboard.Dashboard {
   return build('app', 'App', appRows())
     .withVariable(
@@ -346,4 +440,8 @@ export function appDashboard(): dashboard.Dashboard {
 
 export function platformDashboard(): dashboard.Dashboard {
   return build('platform', 'Platform', platformRows()).build();
+}
+
+export function usageDashboard(): dashboard.Dashboard {
+  return build('usage', 'Free limits', usageRows()).build();
 }

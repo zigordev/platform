@@ -201,9 +201,11 @@ jobs:
         run: |
           enabled="$(jq -r .grafanaCloud observability/push.json)"
           build() {
-            pnpm install --frozen-lockfile > /dev/null &&
+            rm -rf observability/cloud &&
+              pnpm install --frozen-lockfile > /dev/null &&
               pnpm --filter platform-observability run build > /dev/null &&
-              cp -R stack/observability "$1"
+              cp -R stack/observability "$1" &&
+              if [ -d observability/cloud ]; then cp -R observability/cloud "$1/cloud"; fi
           }
           build "$RUNNER_TEMP/after"
           if git checkout --quiet HEAD~1 && build "$RUNNER_TEMP/before"; then

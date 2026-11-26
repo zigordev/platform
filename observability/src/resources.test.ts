@@ -1,6 +1,6 @@
 import * as dashboard from '@grafana/grafana-foundation-sdk/dashboard';
 import { describe, expect, it } from 'vitest';
-import { alerts } from './alerts.ts';
+import { alerts, cloudAlerts } from './alerts.ts';
 import { appDashboard } from './dashboards.ts';
 import { alertManifest, dashboardManifest, folderManifest } from './resources.ts';
 
@@ -102,5 +102,15 @@ describe.each(alerts)('the file of the alert $uid', (alert) => {
       __dashboardUid__: alert.dashboard,
       __panelId__: String(alert.panel),
     });
+  });
+});
+
+describe.each(cloudAlerts)('the file of the alert $uid, which only Grafana Cloud gets', (alert) => {
+  it("asks the data source the alert names: Grafana Cloud's usage numbers", () => {
+    const spec = alertManifest(alert).spec as RuleSpec;
+    expect(spec.expressions.A?.datasourceUID).toBe('grafanacloud-usage');
+    expect(spec.annotations.runbook_url).toBe(
+      `https://github.com/zigordev/platform/blob/main/docs/runbooks/${alert.uid}.md`
+    );
   });
 });

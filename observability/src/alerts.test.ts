@@ -1,14 +1,23 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { alerts, oldestDumpAllowed, oldestRestoreTestAllowed, slowestAllowed } from './alerts.ts';
-import { appPanels, platformPanels } from './dashboards.ts';
+import {
+  alerts,
+  cloudAlerts,
+  freeLimitShareAllowed,
+  oldestDumpAllowed,
+  oldestRestoreTestAllowed,
+  slowestAllowed,
+} from './alerts.ts';
+import { appPanels, freeLimits, platformPanels, usagePanels } from './dashboards.ts';
 
 const runbookFolder = fileURLToPath(new URL('../../docs/runbooks/', import.meta.url));
 const outsideChecks = fileURLToPath(new URL('../../infra/grafana/checks.tf', import.meta.url));
 
+const every = [...alerts, ...cloudAlerts];
+
 function alert(uid: string) {
-  const found = alerts.find((candidate) => candidate.uid === uid);
+  const found = every.find((candidate) => candidate.uid === uid);
   if (found === undefined) {
     throw new Error(`no alert named ${uid}`);
   }
@@ -35,7 +44,13 @@ describe('the alerts', () => {
     expect(new Set(alerts.map((one) => one.title)).size).toBe(alerts.length);
   });
 
-  it.each(alerts)(
+  it("and one that only Grafana Cloud gets, because it reads Grafana Cloud's own numbers, with names no other alert has", () => {
+    expect(cloudAlerts.map((one) => one.uid)).toEqual(['free-limit-is-near']);
+    expect(new Set(every.map((one) => one.uid)).size).toBe(every.length);
+    expect(new Set(every.map((one) => one.title)).size).toBe(every.length);
+  });
+
+  it.each(every)(
     '$uid answers with a number above 0 while it fires, as its threshold needs',
     (one) => {
       const answersAboveZero = /> \d+(\.\d+)?\)?$/.test(one.expr);
@@ -45,13 +60,13 @@ describe('the alerts', () => {
     }
   );
 
-  it.each(alerts)('$uid has a runbook that exists', (one) => {
+  it.each(every)('$uid has a runbook that exists', (one) => {
     expect(one.runbook).toBe(`${one.uid}.md`);
     expect(existsSync(`${runbookFolder}${one.runbook}`)).toBe(true);
   });
 
-  it.each(alerts)('$uid opens a panel that exists on its dashboard', (one) => {
-    const panelsOf = { app: appPanels, platform: platformPanels } as const;
+  it.each(every)('$uid opens a panel that exists on its dashboard', (one) => {
+    const panelsOf = { app: appPanels, platform: platformPanels, usage: usagePanels } as const;
     expect(Object.keys(panelsOf)).toContain(one.dashboard);
     const known: readonly number[] = Object.values(
       panelsOf[one.dashboard as keyof typeof panelsOf]
@@ -59,7 +74,7 @@ describe('the alerts', () => {
     expect(known).toContain(one.panel);
   });
 
-  it.each(alerts)('$uid says in a sentence what is wrong, and whom it reaches', (one) => {
+  it.each(every)('$uid says in a sentence what is wrong, and whom it reaches', (one) => {
     expect(one.summary.length).toBeGreaterThan(30);
     expect(one.summary.endsWith('.')).toBe(false);
     expect(['phone', 'email']).toContain(one.reaches);
@@ -252,5 +267,31 @@ describe('an app that cannot be reached from outside', () => {
   it('reads only the outside checks, whose label product infra/grafana sets, and not the check of the broker', () => {
     expect(readFileSync(outsideChecks, 'utf8')).toMatch(/labels = \{\s*product = each\.key\s*\}/);
     expect(one.expr).not.toContain('job="kafka"');
+  });
+});
+
+describe('a free limit that is near', () => {
+  const one = alert('free-limit-is-near');
+
+  it("reads Grafana Cloud's usage numbers, which only Grafana Cloud has, and its dashboard is only there too", () => {
+    expect(one.datasource).toBe('grafanacloud-usage');
+    expect(one.dashboard).toBe('usage');
+    expect(alerts.some((other) => other.datasource !== undefined)).toBe(false);
+  });
+
+  it('means more than 80% of any free limit is in use, as the plan says, and names the limit', () => {
+    expect(freeLimitShareAllowed).toBe(0.8);
+    expect(one.expr.endsWith(') > 0.8')).toBe(true);
+    expect(one.summary).toContain('{{ $labels.limit }}');
+    for (const limit of freeLimits) {
+      expect(one.expr).toContain(
+        `label_replace(max(${limit.used}) / max(${limit.included}), "limit", "${limit.name}", "", "")`
+      );
+    }
+  });
+
+  it('fires at once and reaches the owner by email', () => {
+    expect(one.for).toBe('0s');
+    expect(one.reaches).toBe('email');
   });
 });

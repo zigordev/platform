@@ -8,9 +8,9 @@
     "node": ">=26"
   },
   "scripts": {
-    "build": "node src/main.ts ../stack/observability",
+    "build": "node src/main.ts ../stack/observability cloud",
     "typecheck": "tsc -p tsconfig.json",
-    "push": "node src/push-main.ts ../stack/observability"
+    "push": "node src/push-main.ts ../stack/observability cloud"
   },
   "dependencies": {
     "@grafana/grafana-foundation-sdk": "catalog:"
