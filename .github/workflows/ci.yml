@@ -15,7 +15,7 @@ concurrency:
 jobs:
   pipeline:
     name: Pipeline
-    uses: zigordev/toolkit/.github/workflows/check.yml@038fb9dd717b588adc9029ff427ea7f3e781e9be # v1.34.0
+    uses: zigordev/toolkit/.github/workflows/check.yml@3a438fe285b7fbec6200838b932037a92a4318e4 # v1.34.1
     permissions:
       contents: read
       security-events: write
@@ -139,7 +139,7 @@ jobs:
     name: Release
     needs: [check]
     if: github.event_name == 'push'
-    uses: zigordev/toolkit/.github/workflows/release.yml@038fb9dd717b588adc9029ff427ea7f3e781e9be # v1.34.0
+    uses: zigordev/toolkit/.github/workflows/release.yml@3a438fe285b7fbec6200838b932037a92a4318e4 # v1.34.1
     permissions:
       contents: write
       id-token: write
@@ -263,7 +263,7 @@ jobs:
     name: Deploy the shared services
     needs: [check, infra-apply]
     if: always() && github.event_name == 'push' && needs.check.result == 'success' && (needs.infra-apply.result == 'success' || needs.infra-apply.result == 'skipped')
-    uses: zigordev/toolkit/.github/workflows/deploy.yml@038fb9dd717b588adc9029ff427ea7f3e781e9be # v1.34.0
+    uses: zigordev/toolkit/.github/workflows/deploy.yml@3a438fe285b7fbec6200838b932037a92a4318e4 # v1.34.1
     permissions:
       contents: read
       id-token: write
