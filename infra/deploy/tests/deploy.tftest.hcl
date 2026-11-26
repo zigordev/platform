@@ -10,18 +10,23 @@ run "the_shared_services_and_each_product_with_a_repo_deploy" {
   command = plan
 
   assert {
-    condition     = toset(keys(aws_ssm_document.deploy)) == toset(["platform", "playground"])
-    error_message = "The shared services deploy, and so does the playground, whose entry names its repo."
+    condition     = toset(keys(aws_ssm_document.deploy)) == toset(["platform", "playground", "notifications"])
+    error_message = "The shared services deploy, and so do the playground and notifications, whose entries name their repos."
   }
 
   assert {
-    condition     = toset(keys(aws_iam_role.deploy)) == toset(["platform", "playground"])
+    condition     = toset(keys(aws_iam_role.deploy)) == toset(["platform", "playground", "notifications"])
     error_message = "A role exists only for a target that deploys."
   }
 
   assert {
     condition     = nonsensitive(jsondecode(aws_iam_role.deploy["playground"].assume_role_policy)).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:zigordev@261390829/playground@1470249518:environment:production"
     error_message = "The playground's role trusts the environment production of its own repo."
+  }
+
+  assert {
+    condition     = nonsensitive(jsondecode(aws_iam_role.deploy["notifications"].assume_role_policy)).Statement[0].Condition.StringEquals["token.actions.githubusercontent.com:sub"] == "repo:zigordev@261390829/notifications@1471637788:environment:production"
+    error_message = "notifications' role trusts the environment production of its own repo."
   }
 }
 
