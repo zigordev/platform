@@ -73,8 +73,8 @@ jobs:
         if: failure()
         working-directory: stack
         run: |
-          docker compose --file compose.yaml --file compose.local.yaml ps --all
-          docker compose --file compose.yaml --file compose.local.yaml logs --tail 40
+          docker compose --file compose.yaml --file compose.local.yaml --profile notifications ps --all
+          docker compose --file compose.yaml --file compose.local.yaml --profile notifications logs --tail 40
 
       - name: Stop them
         if: always()
