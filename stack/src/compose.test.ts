@@ -6,6 +6,7 @@ const everywhere = model(['compose.yaml']);
 const laptop = model(['compose.yaml', 'compose.local.yaml']);
 const withJobs = model(['compose.yaml', 'compose.local.yaml'], 'push');
 const withSetup = model(['compose.yaml', 'compose.local.yaml'], 'setup');
+const withMail = model(['compose.yaml', 'compose.local.yaml'], 'notifications');
 const production = model(['compose.yaml', 'compose.production.yaml']);
 
 const productionText = readFileSync(new URL('../compose.production.yaml', import.meta.url), 'utf8');
@@ -55,6 +56,22 @@ describe('the shared services', () => {
       'kafka-setup',
       'traefik',
     ]);
+  });
+
+  it('add notifications, its migration job and its database on the laptop only, behind the profile that the command starts last', () => {
+    const mailOnly = Object.keys(withMail.services).filter(
+      (name) => laptop.services[name] === undefined
+    );
+    expect(mailOnly.sort()).toEqual([
+      'notifications-api',
+      'notifications-api-migrate',
+      'notifications-postgres',
+    ]);
+    for (const name of mailOnly) {
+      expect(withMail.services[name]?.profiles).toEqual(['notifications']);
+      expect(everywhere.services[name]).toBeUndefined();
+      expect(production.services[name]).toBeUndefined();
+    }
   });
 
   it('form one project with one name, wherever the files are started from', () => {
@@ -593,6 +610,86 @@ describe('the job that pushes the dashboards and the alert rules', () => {
         GCX_KEYCHAIN: 'off',
       })
     );
+  });
+});
+
+describe('notifications on the laptop', () => {
+  const api = withMail.services['notifications-api'];
+  const migrate = withMail.services['notifications-api-migrate'];
+  const database = withMail.services['notifications-postgres'];
+  const pin = /^ghcr\.io\/zigordev\/notifications-api:([0-9a-f]{40})@sha256:[0-9a-f]{64}$/;
+
+  it('runs the image that notifications published, pinned to its commit and its digest', () => {
+    const commit = pin.exec(api?.image ?? '')?.[1];
+    expect(commit).toBeDefined();
+    expect(migrate?.image).toBe(api?.image);
+    expect(api?.environment?.OTEL_SERVICE_VERSION).toBe(commit);
+    expect(migrate?.environment?.OTEL_SERVICE_VERSION).toBe(commit);
+    expect(database?.image).toMatch(/^postgres:\d+\.\d+-alpine[\d.]+@sha256:[0-9a-f]{64}$/);
+  });
+
+  it('signs in to Kafka as its own user, with the password the set-up job gives that user on the laptop', () => {
+    expect(api?.environment?.KAFKA_BROKERS).toBe('kafka:9092');
+    expect(api?.environment?.KAFKA_USERNAME).toBe('notifications-api');
+    expect(api?.environment?.KAFKA_PASSWORD).toBe(
+      withSetup.services['kafka-setup']?.environment?.KAFKA_PASSWORD_NOTIFICATIONS_API
+    );
+  });
+
+  it('delivers every email to Mailpit, and reports to the agent', () => {
+    expect(api?.environment).toEqual(
+      expect.objectContaining({
+        SMTP_HOST: 'mailpit',
+        SMTP_PORT: '1025',
+        SMTP_SECURITY: 'none',
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://alloy:4318',
+      })
+    );
+  });
+
+  it('starts only after its migration job has finished, and the job only once the database is healthy', () => {
+    expect(api?.depends_on?.['notifications-api-migrate']?.condition).toBe(
+      'service_completed_successfully'
+    );
+    expect(migrate?.depends_on?.['notifications-postgres']?.condition).toBe('service_healthy');
+    expect(migrate?.restart).toBe('no');
+    expect(migrate?.labels?.['com.zigordev.job']).toBe('migrate');
+  });
+
+  it('keeps its database on a network of its own, with its data in a volume, and publishes no port', () => {
+    expect(Object.keys(database?.networks ?? {})).toEqual(['notifications']);
+    expect(database?.volumes).toEqual([
+      expect.objectContaining({
+        type: 'volume',
+        source: 'notifications-postgres-data',
+        target: '/var/lib/postgresql',
+      }),
+    ]);
+    for (const service of [api, migrate, database]) {
+      expect(service?.ports).toBeUndefined();
+    }
+  });
+
+  it('asks Traefik for no route, so it never competes with the copy that notifications runs from its own repo', () => {
+    for (const service of [api, migrate, database]) {
+      expect(service?.labels?.['traefik.enable']).toBeUndefined();
+    }
+  });
+
+  it('is boxed in like the shared services: not root, read-only, no capability, an init, and limits', () => {
+    for (const service of [api, migrate]) {
+      expect(service?.user).toBe('1000:1000');
+      expect(service?.read_only).toBe(true);
+      expect(service?.cap_drop).toEqual(['ALL']);
+      expect(service?.init).toBe(true);
+      expect(service?.security_opt).toEqual(['no-new-privileges:true']);
+      expect(Number(service?.mem_limit)).toBeGreaterThan(0);
+      expect(service?.cpus).toBeGreaterThan(0);
+      expect(seconds(service?.stop_grace_period)).toBeLessThanOrEqual(30);
+    }
+    expect(api?.restart).toBe('unless-stopped');
+    expect(api?.healthcheck?.test?.[0]).toBe('CMD');
+    expect(database?.healthcheck?.test?.[0]).toBe('CMD');
   });
 });
 

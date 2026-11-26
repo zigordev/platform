@@ -8,6 +8,8 @@ const both = '--file compose.yaml --file compose.local.yaml';
 const start = `docker compose ${both} up --detach --wait --wait-timeout 300`;
 const setup = `docker compose ${both} run --rm kafka-setup`;
 const push = `docker compose ${both} run --rm gcx`;
+const mail = `docker compose ${both} --profile notifications up --detach --wait --wait-timeout 300 notifications-api`;
+const quiet = `docker compose ${both} --profile notifications stop notifications-api notifications-postgres`;
 
 interface Trial {
   readonly io: Io;
@@ -51,13 +53,47 @@ describe('zigordev-stack up', () => {
     const { io, ran, where } = trial();
     expect(main(['up'], io)).toBe(0);
     expect(ran[0]).toBe(start);
-    expect(where).toEqual(['/somewhere/stack', '/somewhere/stack', '/somewhere/stack']);
+    expect(where).toEqual([
+      '/somewhere/stack',
+      '/somewhere/stack',
+      '/somewhere/stack',
+      '/somewhere/stack',
+    ]);
   });
 
   it("then sets up Kafka's topics and users, and pushes the dashboards and the alert rules, each with a job that is removed afterwards", () => {
     const { io, ran } = trial();
     main(['up'], io);
-    expect(ran).toEqual([start, setup, push]);
+    expect(ran.slice(0, 3)).toEqual([start, setup, push]);
+  });
+
+  it('starts notifications last, once Kafka has its topics and users, because a consumer that misses a topic never starts', () => {
+    const { io, ran } = trial();
+    main(['up'], io);
+    expect(ran).toEqual([start, setup, push, mail]);
+  });
+
+  it('stops the shared copy of notifications instead, when told to run without it, for work on notifications itself', () => {
+    const { io, ran, output } = trial();
+    expect(main(['up', '--without', 'notifications'], io)).toBe(0);
+    expect(ran).toEqual([start, setup, push, quiet]);
+    expect(output()).toContain('The shared services are up:');
+  });
+
+  it('fails with the code Compose gave, and names no address, when notifications does not become healthy', () => {
+    const { io, output } = trial('--wait-timeout 300 notifications-api');
+    expect(main(['up'], io)).toBe(3);
+    expect(output()).toBe(
+      'zigordev-stack: the services are up, but notifications did not become healthy. The lines above say why\n'
+    );
+  });
+
+  it('fails with the code Compose gave when the shared copy of notifications cannot be stopped', () => {
+    const { io, output } = trial(' stop ');
+    expect(main(['up', '--without', 'notifications'], io)).toBe(3);
+    expect(output()).toBe(
+      'zigordev-stack: the services are up, but the shared copy of notifications could not be stopped. The lines above say why\n'
+    );
   });
 
   it('then says where each service can be opened', () => {
@@ -113,10 +149,10 @@ describe('zigordev-stack up', () => {
 });
 
 describe('zigordev-stack down', () => {
-  it('stops the services and keeps their data', () => {
+  it('stops the services, notifications among them, and keeps their data', () => {
     const { io, ran, output } = trial();
     expect(main(['down'], io)).toBe(0);
-    expect(ran).toEqual([`docker compose ${both} down`]);
+    expect(ran).toEqual([`docker compose ${both} --profile notifications down`]);
     expect(output()).toBe('');
   });
 
@@ -127,31 +163,42 @@ describe('zigordev-stack down', () => {
 });
 
 describe('zigordev-stack reset', () => {
-  it('deletes the data, then starts the services and pushes again', () => {
+  it("deletes the data, notifications' included, then starts the services and pushes again", () => {
     const { io, ran, output } = trial();
     expect(main(['reset'], io)).toBe(0);
-    expect(ran).toEqual([`docker compose ${both} down --volumes`, start, setup, push]);
+    expect(ran).toEqual([
+      `docker compose ${both} --profile notifications down --volumes`,
+      start,
+      setup,
+      push,
+      mail,
+    ]);
     expect(output()).toContain('The shared services are up:');
   });
 
   it('starts nothing when the data could not be deleted', () => {
     const { io, ran } = trial('down');
     expect(main(['reset'], io)).toBe(3);
-    expect(ran).toEqual([`docker compose ${both} down --volumes`]);
+    expect(ran).toEqual([`docker compose ${both} --profile notifications down --volumes`]);
   });
 });
 
 describe('zigordev-stack with anything else', () => {
-  it.each([[[]], [['start']], [['up', '--build']], [['down', '--volumes']]])(
-    'explains itself and runs nothing for %j',
-    (args) => {
-      const { io, ran, output } = trial();
-      expect(main(args, io)).toBe(2);
-      expect(ran).toEqual([]);
-      expect(output()).toContain('Usage: zigordev-stack up');
-      expect(output()).toContain('reset  Stops them, deletes their data and starts them again.');
-    }
-  );
+  it.each([
+    [[]],
+    [['start']],
+    [['up', '--build']],
+    [['up', '--without']],
+    [['up', '--without', 'kafka']],
+    [['down', '--without', 'notifications']],
+    [['down', '--volumes']],
+  ])('explains itself and runs nothing for %j', (args) => {
+    const { io, ran, output } = trial();
+    expect(main(args, io)).toBe(2);
+    expect(ran).toEqual([]);
+    expect(output()).toContain('Usage: zigordev-stack up');
+    expect(output()).toContain('reset  Stops them, deletes their data and starts them again.');
+  });
 });
 
 describe('the package', () => {
