@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Output } from './build.ts';
@@ -173,6 +173,9 @@ export async function awake(
   return false;
 }
 
+export const readableFolder = 0o755;
+export const readableByAll = 0o644;
+
 export function gather(folders: readonly string[], into: string): string | undefined {
   const taken = new Set<string>();
   for (const folder of folders) {
@@ -182,6 +185,7 @@ export function gather(folders: readonly string[], into: string): string | undef
       }
       taken.add(file);
       copyFileSync(join(folder, file), join(into, file));
+      chmodSync(join(into, file), readableByAll);
     }
   }
   return undefined;
@@ -211,6 +215,7 @@ export async function run(
     return push(folder, gcxFor(folder), output);
   }
   const together = mkdtempSync(join(tmpdir(), 'zigordev-push-'));
+  chmodSync(together, readableFolder);
   try {
     const twice = gather(args, together);
     if (twice !== undefined) {
