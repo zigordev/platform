@@ -27,6 +27,6 @@ locals {
   ]
 
   alert_email_parameter = "/platform/ALERT_EMAIL"
-  monthly_budget_usd    = 30
+  monthly_budget_usd    = 45
   anomaly_threshold_usd = 5
 }

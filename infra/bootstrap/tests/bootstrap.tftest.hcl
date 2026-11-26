@@ -157,10 +157,10 @@ run "the_state_is_private_versioned_and_encrypted_with_its_own_key" {
   }
 }
 
-run "the_budget_alarm_warns_before_the_month_passes_30_dollars" {
+run "the_budget_alarm_warns_before_the_month_passes_45_dollars" {
   assert {
-    condition     = aws_budgets_budget.monthly.limit_amount == "30" && aws_budgets_budget.monthly.time_unit == "MONTHLY"
-    error_message = "The budget is 30 dollars a month, as decision record 0001 of toolkit says."
+    condition     = aws_budgets_budget.monthly.limit_amount == "45" && aws_budgets_budget.monthly.time_unit == "MONTHLY"
+    error_message = "The budget is 45 dollars a month. Record 0001 of toolkit moves it with each step up, and the owner chose 45 on 2026-11-26, after the host became a t4g.medium."
   }
 
   assert {
