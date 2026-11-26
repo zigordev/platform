@@ -9,7 +9,7 @@
   },
   "notifications": {
     "description": "The email service of every product: only its health check and API docs answer here",
-    "live": false,
+    "live": true,
     "deploy": {
       "repo": "notifications",
       "repoId": 1471637788
