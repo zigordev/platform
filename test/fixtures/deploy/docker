@@ -96,6 +96,25 @@ if [ "$1" = "compose" ]; then
             ;;
         esac
       done
+      if [ -n "${FAKE_BARRIER:-}" ] && [ -z "$job" ]; then
+        case " $FAKE_BARRIER " in
+          *" $project "*)
+            mkdir -p "$fake/barrier"
+            : > "$fake/barrier/$project"
+            waited=0
+            for other in $FAKE_BARRIER; do
+              until [ -f "$fake/barrier/$other" ]; do
+                if [ "$waited" -ge 100 ]; then
+                  echo "$other never started beside $project"
+                  exit 1
+                fi
+                sleep 0.1
+                waited=$((waited + 1))
+              done
+            done
+            ;;
+        esac
+      fi
       if [ -n "$job" ]; then
         if [ -f "$fake/fail/job-$job" ]; then
           echo "the migration failed"

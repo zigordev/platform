@@ -23,19 +23,19 @@ set -e
 
 if [ "$probe" -eq 0 ]; then
   echo "The data disk $device carries a file system or another signature, so it is used as it is"
-  exit 0
-fi
-
-if [ "$probe" -ne 2 ]; then
+elif [ "$probe" -eq 2 ]; then
+  echo "The data disk $device carries no signature, so it is new and gets an ext4 file system labelled $label"
+  mkfs.ext4 -q -L "$label" "$device"
+else
   echo "blkid could not read the data disk $device and ended with $probe, so the disk is left untouched" >&2
   exit 1
 fi
 
-echo "The data disk $device carries no signature, so it is new and gets an ext4 file system labelled $label"
-mkfs.ext4 -q -L "$label" "$device"
 staging="$(mktemp -d)"
 mount "$device" "$staging"
-mkdir -m 0701 "$staging/docker-volumes"
+mkdir -p -m 0701 "$staging/docker-volumes"
+mkdir -p -m 0711 "$staging/containerd"
+resize2fs "$device"
 umount "$staging"
 rmdir "$staging"
 udevadm settle

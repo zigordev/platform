@@ -627,6 +627,55 @@ describe('platform-deploy', { timeout: 30_000 }, () => {
     ]);
   });
 
+  it('brings the products back side by side once the shared services run', () => {
+    repo('platform');
+    const shared = commit('platform', 'stack', []);
+    configure(shared, {
+      name: 'platform',
+      services: { traefik: { image: `traefik:v3.7.19@${digest('e')}` } },
+    });
+    const first = release();
+    repo('shop');
+    const shop = commit('shop', '.', []);
+    configure(shop, {
+      name: 'shop',
+      services: {
+        'shop-api': {
+          image: `ghcr.io/zigordev/shop-api:${shop}`,
+          labels: { 'traefik.enable': 'true' },
+        },
+      },
+    });
+    parameter(
+      '/platform/deploy/platform',
+      JSON.stringify({ commit: shared, images: '', repo: 'platform', dir: 'stack', previous: null })
+    );
+    parameter(
+      '/platform/deploy/playground',
+      JSON.stringify({ commit: first, images: ours, repo: 'playground', dir: '.', previous: null })
+    );
+    parameter(
+      '/platform/deploy/shop',
+      JSON.stringify({
+        commit: shop,
+        images: `ghcr.io/zigordev/shop-api@${digest('f')}`,
+        repo: 'shop',
+        dir: '.',
+        previous: null,
+      })
+    );
+    const result = runWith({ FAKE_BARRIER: 'playground shop' }, '--redeploy-recorded');
+    expect(result.code).toBe(0);
+    const lines = results(result.lines);
+    expect(lines[0]).toBe(`platform-deploy: result=redeployed target=platform commit=${shared}`);
+    expect(lines.slice(1).sort()).toEqual([
+      `platform-deploy: result=redeployed target=playground commit=${first}`,
+      `platform-deploy: result=redeployed target=shop commit=${shop}`,
+    ]);
+    expect(result.lines).toContain(`playground: Bringing back playground at ${first}`);
+    expect(result.lines).toContain(`shop: Bringing back shop at ${shop}`);
+  });
+
   it('does nothing at boot when nothing is recorded', () => {
     const result = run('--redeploy-recorded');
     expect(result.code).toBe(0);

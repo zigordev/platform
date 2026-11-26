@@ -1,0 +1,16 @@
+[Unit]
+Description=containerd's images, kept on the data disk so that a rebuilt host has them
+DefaultDependencies=no
+Requires=srv-data.mount
+After=srv-data.mount
+Conflicts=umount.target
+Before=umount.target
+
+[Mount]
+What=/srv/data/containerd
+Where=/var/lib/containerd
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target
