@@ -220,8 +220,12 @@ describe('the push of dashboards and alerts to Grafana Cloud', () => {
   it("compares the files only Grafana Cloud gets too, and builds each side from nothing, so one side never keeps the other's files", () => {
     expect(decide).toContain('rm -rf observability/cloud &&\n');
     expect(decide).toContain(
-      'if [ -d observability/cloud ]; then cp -R observability/cloud "$1/cloud"; fi\n'
+      'if [ -d observability/cloud ]; then cp -R observability/cloud "$1/cloud"; fi &&\n'
     );
+  });
+
+  it("asks for a push when the push's own code changed, so a fix to the push is tried by one, as after the failed push of 2026-11-26", () => {
+    expect(decide).toContain('cp observability/src/push.ts observability/src/push-main.ts "$1/"\n');
   });
 
   it('waits for the owner in the environment that the apply role trusts, after the gate and the apply', () => {

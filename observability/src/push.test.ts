@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -507,6 +508,28 @@ describe('run', () => {
     expect(held).toEqual(['AlertRule-free-limit-is-near.json', 'Dashboard-app.json']);
     expect(out.join('')).toContain('push: pushed 2 files');
     expect(existsSync(given)).toBe(false);
+  });
+
+  it("lets gcx's own user read the gathered files, which a folder of its own would hide, as the push of 2026-11-26 at 14:51 UTC found", async () => {
+    const everywhere = filesIn('observability', manifest('Dashboard', 'app', 'zigordev'));
+    const cloud = filesIn('cloud', manifest('AlertRule', 'free-limit-is-near', 'zigordev'));
+    const { output } = capture();
+    let folderMode = 0;
+    let fileModes: number[] = [];
+    const code = await run(
+      [everywhere, cloud],
+      env,
+      output,
+      (target) => {
+        folderMode = statSync(target).mode & 0o777;
+        fileModes = readdirSync(target).map((file) => statSync(join(target, file)).mode & 0o777);
+        return () => ok(listing());
+      },
+      ready
+    );
+    expect(code).toBe(0);
+    expect(folderMode).toBe(0o755);
+    expect(fileModes).toEqual([0o644, 0o644]);
   });
 
   it('pushes nothing when two folders hold the same file, and says which', async () => {
