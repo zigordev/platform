@@ -6,7 +6,7 @@ catalog:
   "@biomejs/biome": 2.6.9
   "@commitlint/cli": 21.2.4
   "@grafana/grafana-foundation-sdk": 0.0.22
-  "@types/node": 26.6.10
+  "@types/node": 26.6.11
   "@vitest/coverage-v8": 5.1.2
   "@zigordev/dev": 1.46.1
   lefthook: 2.2.3
