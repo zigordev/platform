@@ -108,7 +108,7 @@ services:
     networks: [zigordev]
 
   gcx:
-    image: grafana/gcx:v1.8.0@sha256:58347c68228ebc5f36a86bfbdbe353c90aa9452cb961da40ec669e00c8361446
+    image: grafana/gcx:v1.9.1@sha256:ff5a224c799029302f1d0b128ec3308338f3a4ea901b4e2f8e7ffe156737ed00
     profiles: [push]
     restart: "no"
     command: [resources, push, --path, /resources, --on-error, abort]
